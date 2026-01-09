@@ -1,4 +1,4 @@
-name: Test ops pkg ARM64 (native runner + nightly fix)
+name: Test ops pkg ARM64 (x86_64 runner + QEMU full)
 
 on:
   push:
@@ -6,67 +6,64 @@ on:
   pull_request:
 
 jobs:
-  test-arm64-native:
-    runs-on: ubuntu-22.04-arm64
+  test-arm64-qemu:
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Verifica ambiente ARM64 reale
-      - name: Verify ARM64 environment
-        run: |
-          uname -m
-          lsb_release -a
-
-      # Dipendenze base
-      - name: Install base dependencies
+      # Install QEMU user-mode + full system emulation
+      - name: Install QEMU (user + system)
         run: |
           sudo apt-get update
           sudo apt-get install -y \
+            qemu-user-static \
+            qemu-system-arm \
+            qemu-system-aarch64 \
+            binfmt-support \
             curl \
-            ca-certificates \
             tar \
             gzip
+          echo "QEMU versions:"
+          qemu-aarch64-static --version
+          qemu-system-aarch64 --version
 
-      # Install ops (ARM64)
+      # Verify binfmt for user-mode
+      - name: Verify ARM64 binfmt
+        run: |
+          if [ -f /proc/sys/fs/binfmt_misc/qemu-aarch64 ]; then
+            echo "ARM64 binfmt enabled"
+          else
+            echo "ARM64 binfmt NOT enabled"
+            exit 1
+          fi
+
+      # Install ops ARM64 as default
       - name: Install ops
         run: |
-          curl -fsSL https://ops.city/get.sh | sh
+          curl https://ops.city/get.sh -sSfL | sh
           sudo mv ops /usr/local/bin/ops
           ops version
-          file /usr/local/bin/ops
 
-      # --- FIX UFFICIALE OPS NIGHTLY (da guida NanoVMs) ---
-      - name: Prepare Ops ARM64 nightly cache
+      # Prepare Ops nightly ARM64 cache (from guide)
+      - name: Prepare Ops nightly ARM64 cache
         run: |
           mkdir -p ~/.ops/nightly
-
           echo "Cleaning x86 artifacts from Ops cache"
-          rm -rf \
-            ~/.ops/nightly/bootx64.efi \
-            ~/.ops/nightly/k* \
-            ~/.ops/nightly/mkfs \
-            ~/.ops/nightly/dump
+          rm -rf ~/.ops/nightly/bootx64.efi ~/.ops/nightly/k* \
+            ~/.ops/nightly/mkfs ~/.ops/nightly/dump || true
 
-          echo "Downloading latest Nanos nightly for ARM64"
+          echo "Downloading latest Nanos nightly ARM64"
           curl -L https://storage.googleapis.com/nanos-release/nightly/nanos-arm64.tar.gz \
             -o /tmp/nanos-arm64.tar.gz
 
           tar -xzf /tmp/nanos-arm64.tar.gz -C /tmp
-
-          echo "Updating Ops nightly cache with ARM64 artifacts"
           cp -v /tmp/nanos-*/* ~/.ops/nightly/
-
           echo "Ops nightly cache content:"
           ls -lh ~/.ops/nightly
 
-      # Scarica package ARM64
-      - name: Download ops package (ARM64)
+      # Download ops package ARM64
+      - name: Download ops package ARM64
         run: |
-          ops pkg get AngeloRubens/TemurinJREarm64Linux:25.0.1 --arch arm64
-
-      # Load / boot package ARM64
-      - name: Load ops package (ARM64 native)
-        run: |
-          ops pkg load AngeloRubens/TemurinJREarm64Linux:25.0.1 --arch arm64
+          ops pkg get AngeloR
