@@ -48,6 +48,7 @@ jobs:
     # Install ops
     - name: Install ops (NanoVMs)
       run: |
+        export OPS_INSTALL_QEMU=0
         curl -L https://ops.city/get.sh | sh
 
     # Add ops to PATH
