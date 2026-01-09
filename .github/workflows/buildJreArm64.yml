@@ -1,151 +1,89 @@
-name: Build Semeru JRE Nanos Package ARM64
+name: Build ARM64 JRE Package (Nanos)
 
 on:
-  push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main ]
   workflow_dispatch:
 
 env:
-  SEMERU_VERSION: "25.0.1"
-  OPENJ9_VERSION: "0.56.0"
-  PACKAGE_NAME: "SemeruJDKarm64Linux"
+  SEMERU_VERSION: 25.0.1
+  PACKAGE_NAME: TemurinJREarm64Linux
+  JRE_URL: https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.1%2B8/OpenJDK25U-jre_aarch64_linux_hotspot_25.0.1_8.tar.gz
 
 jobs:
   build-arm64-package:
     runs-on: ubuntu-22.04
-    
+
     steps:
-    # 1️⃣ Checkout repository
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      # Checkout repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    # 2️⃣ Install QEMU (user-mode + static)
-    - name: Install QEMU
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y qemu qemu-user qemu-user-static
+      # Install system utilities
+      - name: Install system utilities
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system unzip wget tar
 
-    # 3️⃣ Install system utilities
-    - name: Install system utilities
-      run: |
-        sudo apt-get install -y qemu-system unzip wget tar tree
+      # Install ops (NanoVMs)
+      - name: Install ops
+        run: |
+          curl -L https://ops.city/get.sh | sh
 
-    # 4️⃣ Install ops CLI
-    - name: Install ops (NanoVMs)
-      run: |
-        curl -L https://ops.city/get.sh | sh
+      # Add ops to PATH
+      - name: Add ops to PATH
+        run: |
+          echo "$HOME/.ops/bin" >> $GITHUB_PATH
 
-    - name: Add ops to PATH
-      run: |
-        echo "$HOME/.ops/bin" >> $GITHUB_PATH
+      # Verify ops installation
+      - name: Verify ops installation
+        run: |
+          ops version
 
-    - name: Verify ops installation
-      run: |
-        ops version
+      # Create package structure
+      - name: Prepare package directories
+        run: |
+          mkdir -p $PACKAGE_NAME/sysroot
+          cd $PACKAGE_NAME/sysroot
+          # Download Temurin ARM64 JRE
+          wget -O jre.tar.gz $JRE_URL
+          tar -xzf jre.tar.gz --strip-components=1
+          rm jre.tar.gz
+          cd ..
 
-    # 5️⃣ Create package structure
-    - name: Create package structure
-      run: |
-        mkdir -p ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}/sysroot/usr/lib/aarch64-linux-gnu
-        mkdir -p ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}/sysroot/lib64
-        echo "Package structure created"
+      # Create package.manifest
+      - name: Create package.manifest
+        run: |
+          cat > $PACKAGE_NAME/package.manifest <<'EOF'
+          name: TemurinJREarm64Linux
+          version: 25.0.1
+          description: Temurin JRE 25 aarch64 for Nanos
+          EOF
 
-    # 6️⃣ Download IBM Semeru JDK ARM64
-    - name: Download Semeru JDK ARM64
-      run: |
-        cd ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}/sysroot
-        wget -q --show-progress \
-          https://github.com/ibmruntimes/semeru25-binaries/releases/download/jdk-${{ env.SEMERU_VERSION }}%2B8_openj9-${{ env.OPENJ9_VERSION }}/ibm-semeru-open-jdk_aarch64_linux_${{ env.SEMERU_VERSION }}_8_openj9-${{ env.OPENJ9_VERSION }}.tar.gz
-        tar xzf ibm-semeru-open-jdk_aarch64_linux_${{ env.SEMERU_VERSION }}_8_openj9-${{ env.OPENJ9_VERSION }}.tar.gz
-        rm ibm-semeru-open-jdk_aarch64_linux_${{ env.SEMERU_VERSION }}_8_openj9-${{ env.OPENJ9_VERSION }}.tar.gz
+      # Optional README
+      - name: Create README
+        run: |
+          echo "Temurin JRE 25 aarch64 package for Nanos VM" > $PACKAGE_NAME/README.md
 
-    # 7️⃣ Extract ARM64 system libraries + linker
-    - name: Extract ARM64 system libraries
-      run: |
-        cd ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}/sysroot
-        docker run --rm --platform linux/arm64 -v $(pwd):/work ubuntu:22.04 bash -c "
-          set -e
-          apt-get update -qq
-          apt-get install -y -qq libc6 libstdc++6 zlib1g
-          
-          mkdir -p /work/lib64 /work/usr/lib/aarch64-linux-gnu
-          cp /lib/ld-linux-aarch64.so.1 /work/lib64/
-          cp /lib/aarch64-linux-gnu/libc.so.6 /work/usr/lib/aarch64-linux-gnu/
-          cp /lib/aarch64-linux-gnu/libm.so.6 /work/usr/lib/aarch64-linux-gnu/
-          cp /lib/aarch64-linux-gnu/libpthread.so.0 /work/usr/lib/aarch64-linux-gnu/
-          cp /lib/aarch64-linux-gnu/libdl.so.2 /work/usr/lib/aarch64-linux-gnu/
-          cp /lib/aarch64-linux-gnu/librt.so.1 /work/usr/lib/aarch64-linux-gnu/
-          cp /lib/aarch64-linux-gnu/libgcc_s.so.1 /work/usr/lib/aarch64-linux-gnu/
-          cp /usr/lib/aarch64-linux-gnu/libstdc++.so.6 /work/usr/lib/aarch64-linux-gnu/
-          cp /usr/lib/aarch64-linux-gnu/libz.so.1 /work/usr/lib/aarch64-linux-gnu/
-        "
+      # Test package with ops (skipped)
+      - name: Test package with ops (minimal)
+        if: false
+        run: |
+          ops pkg load $PACKAGE_NAME
 
-    # 8️⃣ Create package.manifest (directory superiore a sysroot)
-    - name: Create package.manifest
-      run: |
-        cd ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}
-        cat > package.manifest << 'EOF'
-           {
-            "Program": "jdk-25.0.1+8-openj9/bin/java",
-            "Args": ["java"],
-            "Env": {
-              "JAVA_HOME": "jdk-25.0.1+8-openj9"
-            },
-            "Version": "25.0.1"
-           }
-        EOF
-        cat package.manifest
+      # Create tarball & checksum
+      - name: Package tarball
+        run: |
+          cd $PACKAGE_NAME
+          tar czf ../${PACKAGE_NAME}_${SEMURU_VERSION}.tar.gz sysroot package.manifest README.md
+          cd ..
+          sha256sum ${PACKAGE_NAME}_${SEMERU_VERSION}.tar.gz > ${PACKAGE_NAME}_${SEMERU_VERSION}.tar.gz.sha256
+          cat ${PACKAGE_NAME}_${SEMERU_VERSION}.tar.gz.sha256
 
-    # 9️⃣ Create README.md
-    - name: Create README.md
-      run: |
-        cd ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}
-        cat > README.md << 'EOF'
-        # IBM Semeru JDK ${{ env.SEMERU_VERSION }} for Nanos Unikernel (ARM64)
-
-        Package contains IBM Semeru JDK ARM64 + system libraries for Nanos unikernel.
-
-        ## Structure
-        ```
-        sysroot/
-        ├── lib64/
-        │   └── ld-linux-aarch64.so.1
-        ├── usr/
-        │   └── lib/aarch64-linux-gnu/
-        │       ├── libc.so.6
-        │       ├── libm.so.6
-        │       └── ...
-        └── jdk-${{ env.SEMERU_VERSION }}+8-jre/
-        ```
-        EOF
-
-    # 🔟 Test package with ops (minimal)
-    - name: Test package with ops
-      if: false
-      run: |
-        cd ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}
-        ops pkg add . -n ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}
-        ops pkg load ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}
-
-    - name: Create tarball and checksum
-      run: |
-        cd ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}
-        tar czf ../${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}.tar.gz sysroot package.manifest README.md
-        cd ..
-        sha256sum ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}.tar.gz > ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}.tar.gz.sha256
-        cat ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}.tar.gz.sha256
-
-
-    # 13️⃣ Upload artifact
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
+      # Upload artifacts
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
           name: ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}
           path: |
-                ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}.tar.gz
-                ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}.tar.gz.sha256
+            ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}.tar.gz
+            ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}.tar.gz.sha256
           retention-days: 30
-
- 
