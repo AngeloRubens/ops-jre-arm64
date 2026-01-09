@@ -46,7 +46,9 @@ jobs:
       - name: Add ops to PATH
         run: |
           echo "$HOME/.ops/bin" >> $GITHUB_PATH
-          ops version
+      # Step separato: check ops version
+      - name: Check Ops version
+        run: ops version
 
       # Prepare Ops nightly ARM64 cache (per guida Graviton)
       - name: Prepare Ops nightly ARM64 cache
