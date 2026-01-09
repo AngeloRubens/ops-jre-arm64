@@ -126,7 +126,7 @@ jobs:
       run: |
         cd ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}
         ops pkg add . -n ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}
-        ops load ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}
+        ops pkg load ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}
 
     # 11️⃣ Create tarball
     - name: Create tarball
