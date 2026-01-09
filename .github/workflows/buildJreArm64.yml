@@ -15,62 +15,43 @@ env:
 jobs:
   build-arm64-package:
     runs-on: ubuntu-22.04
-
+    
     steps:
+    # 1️⃣ Checkout repo
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    # Install QEMU (user-mode + static)
+    # 2️⃣ Install QEMU user-mode + Docker buildx
     - name: Install QEMU
       run: |
         sudo apt-get update
         sudo apt-get install -y qemu qemu-user qemu-user-static
+
     - name: Install system utilities
       run: |
-        sudo apt-get install -y qemu-system unzip wget tar
-        # Install system utilities
-        
-    
-    - name: Ensure QEMU binaries are in PATH
-      run: |
-        mkdir -p $HOME/.ops/bin
-        cp /usr/bin/qemu-aarch64-static $HOME/.ops/bin/qemu-aarch64
-        chmod +x $HOME/.ops/bin/qemu-aarch64
-         # Controllo se il binario è accessibile
-        echo "QEMU aarch64 path: $(which qemu-aarch64 || echo 'Not found')"
-    
-        # Versione QEMU
-        qemu-aarch64 --version
+        sudo apt-get install -y wget tar unzip
 
-    - name: Verify QEMU for ops
-      run: |
-        $HOME/.ops/bin/qemu-aarch64 --version
-            
-    # Install ops
+    # 3️⃣ Install ops CLI
     - name: Install ops (NanoVMs)
       run: |
-        export OPS_INSTALL_QEMU=0
         curl -L https://ops.city/get.sh | sh
 
-    # Add ops to PATH
     - name: Add ops to PATH
       run: |
         echo "$HOME/.ops/bin" >> $GITHUB_PATH
 
-    # Verify ops installation
     - name: Verify ops installation
       run: |
-        qemu-aarch64 --version 
         ops version
 
-    # Create package structure
+    # 4️⃣ Create package structure
     - name: Create package structure
       run: |
-        mkdir -p ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}/sysroot/{lib64,usr/lib/aarch64-linux-gnu}
-        cd ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}
-        echo "Package structure created with lib64 and usr/lib/aarch64-linux-gnu"
+        mkdir -p ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}/sysroot/usr/lib/aarch64-linux-gnu
+        mkdir -p ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}/sysroot/lib64
+        echo "Package structure created"
 
-    # Download Semeru JRE ARM64
+    # 5️⃣ Download IBM Semeru JRE ARM64
     - name: Download Semeru JRE ARM64
       run: |
         cd ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}/sysroot
@@ -79,44 +60,54 @@ jobs:
         tar xzf ibm-semeru-open-jdk_aarch64_linux_${{ env.SEMERU_VERSION }}_8_openj9-${{ env.OPENJ9_VERSION }}.tar.gz
         rm ibm-semeru-open-jdk_aarch64_linux_${{ env.SEMERU_VERSION }}_8_openj9-${{ env.OPENJ9_VERSION }}.tar.gz
 
-    # Extract ARM64 system libraries
+    # 6️⃣ Extract ARM64 system libraries + linker via ARM64 container
     - name: Extract ARM64 system libraries
       run: |
         cd ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}/sysroot
-        LINKER=$(find /lib* -name 'ld-linux-aarch64.so.1' 2>/dev/null | head -1)
-        cp "$LINKER" lib64/
-        cp /lib/aarch64-linux-gnu/libc.so.6 usr/lib/aarch64-linux-gnu/
-        cp /lib/aarch64-linux-gnu/libm.so.6 usr/lib/aarch64-linux-gnu/
-        cp /lib/aarch64-linux-gnu/libpthread.so.0 usr/lib/aarch64-linux-gnu/
-        cp /lib/aarch64-linux-gnu/libdl.so.2 usr/lib/aarch64-linux-gnu/
-        cp /lib/aarch64-linux-gnu/librt.so.1 usr/lib/aarch64-linux-gnu/
-        cp /lib/aarch64-linux-gnu/libgcc_s.so.1 usr/lib/aarch64-linux-gnu/
-        cp /usr/lib/aarch64-linux-gnu/libstdc++.so.6 usr/lib/aarch64-linux-gnu/
-        cp /usr/lib/aarch64-linux-gnu/libz.so.1 usr/lib/aarch64-linux-gnu/
+        docker run --rm --platform linux/arm64 -v $(pwd):/work ubuntu:22.04 bash -c "
+          set -e
+          apt-get update -qq
+          apt-get install -y -qq libc6 libstdc++6 zlib1g
+          
+          mkdir -p /work/lib64 /work/usr/lib/aarch64-linux-gnu
+          cp /lib/ld-linux-aarch64.so.1 /work/lib64/
+          cp /lib/aarch64-linux-gnu/libc.so.6 /work/usr/lib/aarch64-linux-gnu/
+          cp /lib/aarch64-linux-gnu/libm.so.6 /work/usr/lib/aarch64-linux-gnu/
+          cp /lib/aarch64-linux-gnu/libpthread.so.0 /work/usr/lib/aarch64-linux-gnu/
+          cp /lib/aarch64-linux-gnu/libdl.so.2 /work/usr/lib/aarch64-linux-gnu/
+          cp /lib/aarch64-linux-gnu/librt.so.1 /work/usr/lib/aarch64-linux-gnu/
+          cp /lib/aarch64-linux-gnu/libgcc_s.so.1 /work/usr/lib/aarch64-linux-gnu/
+          cp /usr/lib/aarch64-linux-gnu/libstdc++.so.6 /work/usr/lib/aarch64-linux-gnu/
+          cp /usr/lib/aarch64-linux-gnu/libz.so.1 /work/usr/lib/aarch64-linux-gnu/
+        "
 
-    # Verify Java runtime (minimal)
-    - name: Verify Java runtime
+    # 7️⃣ Verify package structure
+    - name: Verify package structure
       run: |
-        ops run \
-          --package "AngeloRubens/SemeruJREx64Linux:25.0.1" \
-          --nightly \
-          --command java
+        cd ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}/sysroot
+        tree -L 3 || find . -type f | head -50
 
-    # Create tarball
+    # 8️⃣ Test package with ops (minimal)
+    - name: Test package with ops
+      run: |
+        cd ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}/sysroot
+        ops pkg add . -n ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}
+        ops run java -version
+
+    # 9️⃣ Create tarball
     - name: Create tarball
       run: |
-        tar czf ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}.tar.gz \
-          ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}/
+        cd ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}
+        tar czf ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}.tar.gz sysroot
         ls -lh ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}.tar.gz
 
-    # Generate checksum
-    - name: Generate checksum
+    # 🔟 Generate checksum
+    - name: Generate checksums
       run: |
-        sha256sum ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}.tar.gz > \
-          ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}.tar.gz.sha256
+        sha256sum ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}.tar.gz > ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}.tar.gz.sha256
         cat ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}.tar.gz.sha256
 
-    # Upload artifacts
+    # 11️⃣ Upload artifacts
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
