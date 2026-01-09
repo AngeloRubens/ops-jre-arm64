@@ -17,14 +17,8 @@ jobs:
       - name: Install QEMU and utilities
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            qemu-user-static \
-            qemu-system-arm \
-            qemu-system-aarch64 \
-            binfmt-support \
-            curl \
-            tar \
-            gzip
+          sudo apt-get install -y qemu-system qemu-user qemu-user-static qemu-system-arm qemu-system-aarch64 binfmt-support wget tar gzip
+
 
           # Ensure qemu-aarch64-static is in PATH for Ops
           sudo ln -sf $(which qemu-aarch64-static) /usr/local/bin/qemu-aarch64
