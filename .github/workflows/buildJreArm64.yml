@@ -73,10 +73,11 @@ jobs:
       - name: Package tarball
         run: |
           cd $PACKAGE_NAME
-          tar czf ../${PACKAGE_NAME}_${SEMURU_VERSION}.tar.gz sysroot package.manifest README.md
+          tar czf ../${PACKAGE_NAME}_${SEMERU_VERSION}.tar.gz sysroot package.manifest README.md
           cd ..
           sha256sum ${PACKAGE_NAME}_${SEMERU_VERSION}.tar.gz > ${PACKAGE_NAME}_${SEMERU_VERSION}.tar.gz.sha256
           cat ${PACKAGE_NAME}_${SEMERU_VERSION}.tar.gz.sha256
+
 
       # Upload artifacts
       - name: Upload artifact
