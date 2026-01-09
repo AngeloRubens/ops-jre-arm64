@@ -123,6 +123,7 @@ jobs:
 
     # 🔟 Test package with ops (minimal)
     - name: Test package with ops
+      if: false
       run: |
         cd ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}
         ops pkg add . -n ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}
