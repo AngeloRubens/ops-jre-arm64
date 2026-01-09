@@ -129,18 +129,13 @@ jobs:
         ops pkg add . -n ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}
         ops pkg load ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}
 
-    # 11️⃣ Create tarball
-    - name: Create tarball
+    - name: Create tarball and checksum
       run: |
         cd ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}
         tar czf ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}.tar.gz sysroot package.manifest README.md
-        ls -lh ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}.tar.gz
-
-    # 12️⃣ Generate checksum
-    - name: Generate checksums
-      run: |
         sha256sum ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}.tar.gz > ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}.tar.gz.sha256
         cat ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}.tar.gz.sha256
+
 
     # 13️⃣ Upload artifact
     - name: Upload artifact
