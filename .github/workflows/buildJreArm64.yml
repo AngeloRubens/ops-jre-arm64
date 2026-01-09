@@ -75,15 +75,15 @@ jobs:
       - name: Create package.manifest
         run: |
           cat > $PACKAGE_NAME/package.manifest <<EOF
-{
-  "Program": "/${SYSROOT_JDK_DIR}/bin/java",
-  "Args": ["java"],
-  "Env": {
-    "JAVA_HOME": "/${SYSROOT_JDK_DIR}"
-  },
-  "Version": "${SEMURU_VERSION}"
-}
-EOF
+          {
+            "Program": "/${SYSROOT_JDK_DIR}/bin/java",
+            "Args": ["java"],
+            "Env": {
+              "JAVA_HOME": "/${SYSROOT_JDK_DIR}"
+            },
+            "Version": "${SEMURU_VERSION}"
+          }
+          EOF
 
       # Optional README
       - name: Create README
