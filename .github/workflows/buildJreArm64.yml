@@ -84,18 +84,35 @@ jobs:
     - name: Extract ARM64 system libraries
       run: |
         cd ${PACKAGE_NAME}_${SEMERU_VERSION}/sysroot
-
+    
         docker run --rm \
           --platform linux/arm64 \
           -v $(pwd):/work \
           ubuntu:22.04 bash -c "
             set -e
+    
             apt-get update -qq
             apt-get install -y -qq libc6 libstdc++6 zlib1g
-
-            LINKER=\$(find /lib* -name 'ld-linux-aarch64.so.1' | head -1)
-            cp \$LINKER /work/lib64/
-
+    
+            echo 'Detecting dynamic linker...'
+    
+            if [ -f /lib/ld-linux-aarch64.so.1 ]; then
+              LINKER=/lib/ld-linux-aarch64.so.1
+            else
+              LINKER=\$(find /lib /lib64 /usr/lib -name 'ld-linux-aarch64.so.1' 2>/dev/null | head -1)
+            fi
+    
+            if [ -z \"\$LINKER\" ]; then
+              echo 'ERROR: dynamic linker not found'
+              exit 1
+            fi
+    
+            echo \"Using linker: \$LINKER\"
+            cp \$LINKER /work/lib64/ld-linux-aarch64.so.1
+            chmod +x /work/lib64/ld-linux-aarch64.so.1
+    
+            echo 'Copying system libraries...'
+    
             cp /lib/aarch64-linux-gnu/libc.so.6 /work/usr/lib/aarch64-linux-gnu/
             cp /lib/aarch64-linux-gnu/libm.so.6 /work/usr/lib/aarch64-linux-gnu/
             cp /lib/aarch64-linux-gnu/libpthread.so.0 /work/usr/lib/aarch64-linux-gnu/
@@ -104,6 +121,8 @@ jobs:
             cp /lib/aarch64-linux-gnu/libgcc_s.so.1 /work/usr/lib/aarch64-linux-gnu/
             cp /usr/lib/aarch64-linux-gnu/libstdc++.so.6 /work/usr/lib/aarch64-linux-gnu/
             cp /usr/lib/aarch64-linux-gnu/libz.so.1 /work/usr/lib/aarch64-linux-gnu/
+    
+            echo 'Libraries copied successfully'
           "
 
     - name: Verify package structure
