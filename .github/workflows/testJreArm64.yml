@@ -41,11 +41,12 @@ jobs:
       - name: Install ops
         run: |
           curl https://ops.city/get.sh -sSfL | sh
-          sudo mv ops /usr/local/bin/ops
-          ops version
+          
+          
       - name: Add ops to PATH
         run: |
-          echo "$HOME/.ops/bin" >> $GITHUB_PATH    
+          echo "$HOME/.ops/bin" >> $GITHUB_PATH
+          ops version
 
       # Prepare Ops nightly ARM64 cache (per guida Graviton)
       - name: Prepare Ops nightly ARM64 cache
