@@ -1,4 +1,4 @@
-name: Build Semeru JRE Nanos Package ARM64
+name: Build Semeru JDK Nanos Package ARM64
 
 on:
   push:
@@ -9,8 +9,8 @@ on:
 
 env:
   SEMERU_VERSION: "25.0.1"
-  OPENJ9_VERSION: "0.49.0"
-  PACKAGE_NAME: "SemeruJREarm64Linux"
+  OPENJ9_VERSION: "0.56.0"
+  PACKAGE_NAME: "SemeruJDKarm64Linux"
 
 jobs:
   build-arm64-package:
@@ -31,23 +31,21 @@ jobs:
     - name: Install tools
       run: |
         sudo apt-get update -qq
-        sudo apt-get install -y tree wget
+        sudo apt-get install -y wget tree
 
     - name: Create package structure
       run: |
         mkdir -p ${PACKAGE_NAME}_${SEMERU_VERSION}/sysroot/{lib64,usr/lib/aarch64-linux-gnu}
-        cd ${PACKAGE_NAME}_${SEMERU_VERSION}
-        echo "Package structure created"
 
     - name: Create package.manifest
       run: |
         cd ${PACKAGE_NAME}_${SEMERU_VERSION}
         cat > package.manifest << EOF
         {
-          "Program": "/jdk-${SEMERU_VERSION}+8-jre/bin/java",
+          "Program": "/jdk-${SEMERU_VERSION}+8/bin/java",
           "Args": ["-version"],
           "Env": {
-            "JAVA_HOME": "/jdk-${SEMERU_VERSION}+8-jre"
+            "JAVA_HOME": "/jdk-${SEMERU_VERSION}+8"
           },
           "Version": "${SEMERU_VERSION}"
         }
@@ -58,28 +56,30 @@ jobs:
       run: |
         cd ${PACKAGE_NAME}_${SEMERU_VERSION}
         cat > README.md << EOF
-        # IBM Semeru JRE ${SEMERU_VERSION} for Nanos Unikernel (ARM64)
+        # IBM Semeru JDK ${SEMERU_VERSION} (OpenJ9 ${OPENJ9_VERSION}) for Nanos – ARM64
 
-        IBM Semeru OpenJ9 JRE packaged for NanoVMs Nanos unikernel.
+        IBM Semeru OpenJDK packaged for NanoVMs Nanos unikernel.
 
         ## Architecture
         - linux/arm64 (aarch64)
         - Dynamic linker: ld-linux-aarch64.so.1
 
-        ## Build info
+        ## Build information
+        - Java: ${SEMERU_VERSION}
         - OpenJ9: ${OPENJ9_VERSION}
         - Built on: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
         - Repository: ${GITHUB_REPOSITORY}
         EOF
 
-    - name: Download Semeru JRE ARM64
+    - name: Download Semeru JDK ARM64
       run: |
         cd ${PACKAGE_NAME}_${SEMERU_VERSION}/sysroot
-        wget -q --show-progress \
-          https://github.com/ibmruntimes/semeru25-binaries/releases/download/jdk-${SEMERU_VERSION}%2B8_openj9-${OPENJ9_VERSION}/ibm-semeru-open-jre_aarch64_linux_${SEMERU_VERSION}_8_openj9-${OPENJ9_VERSION}.tar.gz
 
-        tar xzf ibm-semeru-open-jre_aarch64_linux_${SEMERU_VERSION}_8_openj9-${OPENJ9_VERSION}.tar.gz
-        rm ibm-semeru-open-jre_aarch64_linux_${SEMERU_VERSION}_8_openj9-${OPENJ9_VERSION}.tar.gz
+        wget -q --show-progress \
+          https://github.com/ibmruntimes/semeru25-binaries/releases/download/jdk-${SEMERU_VERSION}%2B8_openj9-${OPENJ9_VERSION}/ibm-semeru-open-jdk_aarch64_linux_${SEMERU_VERSION}_8_openj9-${OPENJ9_VERSION}.tar.gz
+
+        tar xzf ibm-semeru-open-jdk_aarch64_linux_${SEMERU_VERSION}_8_openj9-${OPENJ9_VERSION}.tar.gz
+        rm ibm-semeru-open-jdk_aarch64_linux_${SEMERU_VERSION}_8_openj9-${OPENJ9_VERSION}.tar.gz
 
     - name: Extract ARM64 system libraries
       run: |
@@ -110,8 +110,9 @@ jobs:
       run: |
         cd ${PACKAGE_NAME}_${SEMERU_VERSION}
         tree -L 4
-        file sysroot/jdk-${SEMERU_VERSION}+8-jre/bin/java
+        file sysroot/jdk-${SEMERU_VERSION}+8/bin/java
         file sysroot/lib64/ld-linux-aarch64.so.1
+        file sysroot/usr/lib/aarch64-linux-gnu/libc.so.6
 
     - name: Install ops CLI
       run: |
@@ -128,10 +129,10 @@ jobs:
       run: |
         cat > config.json << EOF
         {
-          "Program": "/jdk-${SEMERU_VERSION}+8-jre/bin/java",
+          "Program": "/jdk-${SEMERU_VERSION}+8/bin/java",
           "Args": ["-version"],
           "Env": {
-            "JAVA_HOME": "/jdk-${SEMERU_VERSION}+8-jre"
+            "JAVA_HOME": "/jdk-${SEMERU_VERSION}+8"
           },
           "RunConfig": {
             "Memory": "256m"
@@ -161,3 +162,4 @@ jobs:
         path: |
           ${PACKAGE_NAME}_${SEMERU_VERSION}.tar.gz
           ${PACKAGE_NAME}_${SEMERU_VERSION}.tar.gz.sha256
+        retention-days: 30
