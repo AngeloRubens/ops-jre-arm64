@@ -70,10 +70,15 @@ jobs:
       # Create package.manifest
       - name: Create package.manifest
         run: |
-          cat > $PACKAGE_NAME/package.manifest <<'EOF'
-          name: TemurinJREarm64Linux
-          version: 25.0.1
-          description: Temurin JRE 25 aarch64 for Nanos
+         cat > $PACKAGE_NAME/package.manifest <<EOF
+                  {
+                    "Program": "/jdk-25.0.1+8-jre/bin/java",
+                    "Args": ["java"],
+                    "Env": {
+                      "JAVA_HOME": "/jdk-25.0.1+8-jre"
+                    },
+                    "Version": "25.0.1"
+                  }
           EOF
 
       # Optional README
