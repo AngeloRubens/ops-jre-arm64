@@ -133,10 +133,18 @@ jobs:
         file sysroot/lib64/ld-linux-aarch64.so.1
         file sysroot/usr/lib/aarch64-linux-gnu/libc.so.6
 
-    - name: Install ops CLI
+    - name: Install ops CLI (official installer)
       run: |
-        curl -sSfL https://ops.city/get.sh | sudo sh
+        set -e
+    
+        curl https://ops.city/get.sh -sSfL | sh
+    
+        export PATH="$HOME/.ops/bin:$PATH"
+    
+        echo "$HOME/.ops/bin" >> $GITHUB_PATH
+    
         ops version
+
 
     - name: Load package into ops
       run: |
