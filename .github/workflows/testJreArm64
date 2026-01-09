@@ -1,0 +1,37 @@
+name: Test ops pkg ARM64 (QEMU)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  test-arm64:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Abilita emulazione ARM64
+      - name: Enable QEMU for ARM64
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      # Installa ops (NanoVMs)
+      - name: Install ops
+        run: |
+          curl -fsSL https://ops.city/get.sh | sh
+          sudo mv ops /usr/local/bin/ops
+          ops version
+
+      # Scarica il package
+      - name: Download ops package (ARM64)
+        run: |
+          ops pkg get AngeloRubens/TemurinJREarm64Linux:25.0.1 --arch arm64
+
+      # Carica ed esegue il package sotto emulazione ARM64
+      - name: Load and execute ops package (ARM64 via QEMU)
+        run: |
+          ops pkg load AngeloRubens/TemurinJREarm64Linux:25.0.1 --arch arm64
