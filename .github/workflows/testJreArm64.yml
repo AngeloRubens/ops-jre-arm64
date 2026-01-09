@@ -26,17 +26,14 @@ jobs:
             tar \
             gzip
 
+          # Ensure qemu-aarch64-static is in PATH for Ops
+          sudo ln -sf $(which qemu-aarch64-static) /usr/local/bin/qemu-aarch64
+
           echo "QEMU versions installed:"
-          qemu-aarch64-static --version
+          qemu-aarch64 --version
           qemu-system-aarch64 --version
 
-      # Ensure qemu-aarch64-static is in PATH for Ops
-      - name: Ensure qemu-aarch64-static is in PATH
-        run: |
-          sudo ln -sf $(which qemu-aarch64-static) /usr/local/bin/qemu-aarch64
-          qemu-aarch64 --version
-
-      # Verify binfmt for user-mode ARM64
+      # Verify binfmt for ARM64
       - name: Verify ARM64 binfmt
         run: |
           if [ -f /proc/sys/fs/binfmt_misc/qemu-aarch64 ]; then
