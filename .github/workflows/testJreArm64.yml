@@ -59,7 +59,7 @@ jobs:
             ~/.ops/nightly/mkfs ~/.ops/nightly/dump || true
 
           echo "Downloading latest Nanos nightly ARM64"
-          curl -L https://storage.googleapis.com/nanos-release/nightly/nanos-arm64.tar.gz \
+          curl -L https://storage.googleapis.com/nanos/release/nightly/nanos-nightly-linux-virt.tar.gz \
             -o /tmp/nanos-arm64.tar.gz
 
           tar -xzf /tmp/nanos-arm64.tar.gz -C /tmp
