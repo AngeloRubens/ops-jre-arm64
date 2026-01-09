@@ -30,6 +30,9 @@ jobs:
     - name: Install system utilities
       run: |
         sudo apt-get install -y wget tar unzip
+    - name: Ensure QEMU binaries are in PATH
+      run: |
+        sudo ln -sf /usr/bin/qemu-aarch64-static $HOME/.ops/bin/qemu-aarch64
 
     # Install ops
     - name: Install ops (NanoVMs)
@@ -44,6 +47,7 @@ jobs:
     # Verify ops installation
     - name: Verify ops installation
       run: |
+        qemu-aarch64 --version 
         ops version
 
     # Create package structure
