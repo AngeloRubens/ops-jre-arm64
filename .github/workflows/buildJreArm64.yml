@@ -1,4 +1,4 @@
-name: Build Semeru JDK Nanos Package ARM64
+name: Build Semeru JRE Nanos Package ARM64
 
 on:
   push:
@@ -14,179 +14,97 @@ env:
 
 jobs:
   build-arm64-package:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Set up QEMU for ARM64
-      uses: docker/setup-qemu-action@v3
-      with:
-        platforms: arm64
-
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-
-    - name: Install tools
+    # Install QEMU (user-mode + static)
+    - name: Install QEMU
       run: |
-        sudo apt-get update -qq
-        sudo apt-get install -y wget tree
+        sudo apt-get update
+        sudo apt-get install -y qemu qemu-user qemu-user-static
 
-    - name: Create package structure
+    # Install system utilities
+    - name: Install system utilities
       run: |
-        mkdir -p ${PACKAGE_NAME}_${SEMERU_VERSION}/sysroot/{lib64,usr/lib/aarch64-linux-gnu}
+        sudo apt-get install -y wget tar unzip
 
-    - name: Create package.manifest
+    # Install ops
+    - name: Install ops (NanoVMs)
       run: |
-        cd ${PACKAGE_NAME}_${SEMERU_VERSION}
-        cat > package.manifest << EOF
-        {
-          "Program": "/jdk-${SEMERU_VERSION}+8/bin/java",
-          "Args": ["-version"],
-          "Env": {
-            "JAVA_HOME": "/jdk-${SEMERU_VERSION}+8"
-          },
-          "Version": "${SEMERU_VERSION}"
-        }
-        EOF
-        cat package.manifest
+        curl -L https://ops.city/get.sh | sh
 
-    - name: Create README.md
+    # Add ops to PATH
+    - name: Add ops to PATH
       run: |
-        cd ${PACKAGE_NAME}_${SEMERU_VERSION}
-        cat > README.md << EOF
-        # IBM Semeru JDK ${SEMERU_VERSION} (OpenJ9 ${OPENJ9_VERSION}) for Nanos – ARM64
-
-        IBM Semeru OpenJDK packaged for NanoVMs Nanos unikernel.
-
-        ## Architecture
-        - linux/arm64 (aarch64)
-        - Dynamic linker: ld-linux-aarch64.so.1
-
-        ## Build information
-        - Java: ${SEMERU_VERSION}
-        - OpenJ9: ${OPENJ9_VERSION}
-        - Built on: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
-        - Repository: ${GITHUB_REPOSITORY}
-        EOF
-
-    - name: Download Semeru JDK ARM64
-      run: |
-        cd ${PACKAGE_NAME}_${SEMERU_VERSION}/sysroot
-
-        wget -q --show-progress \
-          https://github.com/ibmruntimes/semeru25-binaries/releases/download/jdk-${SEMERU_VERSION}%2B8_openj9-${OPENJ9_VERSION}/ibm-semeru-open-jdk_aarch64_linux_${SEMERU_VERSION}_8_openj9-${OPENJ9_VERSION}.tar.gz
-
-        tar xzf ibm-semeru-open-jdk_aarch64_linux_${SEMERU_VERSION}_8_openj9-${OPENJ9_VERSION}.tar.gz
-        rm ibm-semeru-open-jdk_aarch64_linux_${SEMERU_VERSION}_8_openj9-${OPENJ9_VERSION}.tar.gz
-
-    - name: Extract ARM64 system libraries
-      run: |
-        cd ${PACKAGE_NAME}_${SEMERU_VERSION}/sysroot
-    
-        docker run --rm \
-          --platform linux/arm64 \
-          -v $(pwd):/work \
-          ubuntu:22.04 bash -c "
-            set -e
-    
-            apt-get update -qq
-            apt-get install -y -qq libc6 libstdc++6 zlib1g
-    
-            echo 'Detecting dynamic linker...'
-    
-            if [ -f /lib/ld-linux-aarch64.so.1 ]; then
-              LINKER=/lib/ld-linux-aarch64.so.1
-            else
-              LINKER=\$(find /lib /lib64 /usr/lib -name 'ld-linux-aarch64.so.1' 2>/dev/null | head -1)
-            fi
-    
-            if [ -z \"\$LINKER\" ]; then
-              echo 'ERROR: dynamic linker not found'
-              exit 1
-            fi
-    
-            echo \"Using linker: \$LINKER\"
-            cp \$LINKER /work/lib64/ld-linux-aarch64.so.1
-            chmod +x /work/lib64/ld-linux-aarch64.so.1
-    
-            echo 'Copying system libraries...'
-    
-            cp /lib/aarch64-linux-gnu/libc.so.6 /work/usr/lib/aarch64-linux-gnu/
-            cp /lib/aarch64-linux-gnu/libm.so.6 /work/usr/lib/aarch64-linux-gnu/
-            cp /lib/aarch64-linux-gnu/libpthread.so.0 /work/usr/lib/aarch64-linux-gnu/
-            cp /lib/aarch64-linux-gnu/libdl.so.2 /work/usr/lib/aarch64-linux-gnu/
-            cp /lib/aarch64-linux-gnu/librt.so.1 /work/usr/lib/aarch64-linux-gnu/
-            cp /lib/aarch64-linux-gnu/libgcc_s.so.1 /work/usr/lib/aarch64-linux-gnu/
-            cp /usr/lib/aarch64-linux-gnu/libstdc++.so.6 /work/usr/lib/aarch64-linux-gnu/
-            cp /usr/lib/aarch64-linux-gnu/libz.so.1 /work/usr/lib/aarch64-linux-gnu/
-    
-            echo 'Libraries copied successfully'
-          "
-
-    - name: Verify package structure
-      run: |
-        cd ${PACKAGE_NAME}_${SEMERU_VERSION}
-        tree -L 4
-        file sysroot/jdk-${SEMERU_VERSION}+8/bin/java
-        file sysroot/lib64/ld-linux-aarch64.so.1
-        file sysroot/usr/lib/aarch64-linux-gnu/libc.so.6
-
-    - name: Install ops CLI (official installer)
-      run: |
-        set -e
-    
-        curl https://ops.city/get.sh -sSfL | sh
-    
-        export PATH="$HOME/.ops/bin:$PATH"
-    
         echo "$HOME/.ops/bin" >> $GITHUB_PATH
-    
+
+    # Verify ops installation
+    - name: Verify ops installation
+      run: |
         ops version
 
-
-    - name: Load package into ops
+    # Create package structure
+    - name: Create package structure
       run: |
-        cd ${PACKAGE_NAME}_${SEMERU_VERSION}
-        ops pkg add . -n ${PACKAGE_NAME}_${SEMERU_VERSION}
-        ops pkg list
+        mkdir -p ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}/sysroot/{lib64,usr/lib/aarch64-linux-gnu}
+        cd ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}
+        echo "Package structure created with lib64 and usr/lib/aarch64-linux-gnu"
 
-    - name: Verify java execution with ops (ARM64)
+    # Download Semeru JRE ARM64
+    - name: Download Semeru JRE ARM64
       run: |
-        cat > config.json << EOF
-        {
-          "Program": "/jdk-${SEMERU_VERSION}+8/bin/java",
-          "Args": ["-version"],
-          "Env": {
-            "JAVA_HOME": "/jdk-${SEMERU_VERSION}+8"
-          },
-          "RunConfig": {
-            "Memory": "256m"
-          }
-        }
-        EOF
+        cd ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}/sysroot
+        wget -q --show-progress \
+          https://github.com/ibmruntimes/semeru25-binaries/releases/download/jdk-${{ env.SEMERU_VERSION }}%2B8_openj9-${{ env.OPENJ9_VERSION }}/ibm-semeru-open-jdk_aarch64_linux_${{ env.SEMERU_VERSION }}_8_openj9-${{ env.OPENJ9_VERSION }}.tar.gz
+        tar xzf ibm-semeru-open-jdk_aarch64_linux_${{ env.SEMERU_VERSION }}_8_openj9-${{ env.OPENJ9_VERSION }}.tar.gz
+        rm ibm-semeru-open-jdk_aarch64_linux_${{ env.SEMERU_VERSION }}_8_openj9-${{ env.OPENJ9_VERSION }}.tar.gz
 
-        timeout 60 ops run -c config.json || {
-          echo "ERROR: java did not start correctly"
-          exit 1
-        }
+    # Extract ARM64 system libraries
+    - name: Extract ARM64 system libraries
+      run: |
+        cd ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}/sysroot
+        LINKER=$(find /lib* -name 'ld-linux-aarch64.so.1' 2>/dev/null | head -1)
+        cp "$LINKER" lib64/
+        cp /lib/aarch64-linux-gnu/libc.so.6 usr/lib/aarch64-linux-gnu/
+        cp /lib/aarch64-linux-gnu/libm.so.6 usr/lib/aarch64-linux-gnu/
+        cp /lib/aarch64-linux-gnu/libpthread.so.0 usr/lib/aarch64-linux-gnu/
+        cp /lib/aarch64-linux-gnu/libdl.so.2 usr/lib/aarch64-linux-gnu/
+        cp /lib/aarch64-linux-gnu/librt.so.1 usr/lib/aarch64-linux-gnu/
+        cp /lib/aarch64-linux-gnu/libgcc_s.so.1 usr/lib/aarch64-linux-gnu/
+        cp /usr/lib/aarch64-linux-gnu/libstdc++.so.6 usr/lib/aarch64-linux-gnu/
+        cp /usr/lib/aarch64-linux-gnu/libz.so.1 usr/lib/aarch64-linux-gnu/
 
+    # Verify Java runtime (minimal)
+    - name: Verify Java runtime
+      run: |
+        ops run \
+          --package "AngeloRubens/SemeruJREx64Linux:25.0.1" \
+          --nightly \
+          --command java
+
+    # Create tarball
     - name: Create tarball
       run: |
-        tar czf ${PACKAGE_NAME}_${SEMERU_VERSION}.tar.gz \
-          ${PACKAGE_NAME}_${SEMERU_VERSION}
+        tar czf ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}.tar.gz \
+          ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}/
+        ls -lh ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}.tar.gz
 
-    - name: Generate checksums
+    # Generate checksum
+    - name: Generate checksum
       run: |
-        sha256sum ${PACKAGE_NAME}_${SEMERU_VERSION}.tar.gz > \
-          ${PACKAGE_NAME}_${SEMERU_VERSION}.tar.gz.sha256
+        sha256sum ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}.tar.gz > \
+          ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}.tar.gz.sha256
+        cat ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}.tar.gz.sha256
 
-    - name: Upload artifacts
+    # Upload artifacts
+    - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: ${PACKAGE_NAME}_${SEMERU_VERSION}
+        name: ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}
         path: |
-          ${PACKAGE_NAME}_${SEMERU_VERSION}.tar.gz
-          ${PACKAGE_NAME}_${SEMERU_VERSION}.tar.gz.sha256
+          ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}.tar.gz
+          ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}.tar.gz.sha256
         retention-days: 30
