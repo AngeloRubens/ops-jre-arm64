@@ -1,4 +1,4 @@
-name: Test ops pkg ARM64 (x86_64 runner + QEMU full)
+name: Test ARM64 ops pkg via QEMU (full)
 
 on:
   push:
@@ -13,8 +13,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Install QEMU user-mode + full system emulation
-      - name: Install QEMU (user + system)
+      # Install QEMU user-mode + system emulation + utilities
+      - name: Install QEMU and utilities
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -25,11 +25,18 @@ jobs:
             curl \
             tar \
             gzip
-          echo "QEMU versions:"
+
+          echo "QEMU versions installed:"
           qemu-aarch64-static --version
           qemu-system-aarch64 --version
 
-      # Verify binfmt for user-mode
+      # Ensure qemu-aarch64-static is in PATH for Ops
+      - name: Ensure qemu-aarch64-static is in PATH
+        run: |
+          sudo ln -sf $(which qemu-aarch64-static) /usr/local/bin/qemu-aarch64
+          qemu-aarch64 --version
+
+      # Verify binfmt for user-mode ARM64
       - name: Verify ARM64 binfmt
         run: |
           if [ -f /proc/sys/fs/binfmt_misc/qemu-aarch64 ]; then
@@ -39,14 +46,14 @@ jobs:
             exit 1
           fi
 
-      # Install ops ARM64 as default
+      # Install ops (ARM64 capable) as default
       - name: Install ops
         run: |
           curl https://ops.city/get.sh -sSfL | sh
           sudo mv ops /usr/local/bin/ops
           ops version
 
-      # Prepare Ops nightly ARM64 cache (from guide)
+      # Prepare Ops nightly ARM64 cache (per guida Graviton)
       - name: Prepare Ops nightly ARM64 cache
         run: |
           mkdir -p ~/.ops/nightly
@@ -66,4 +73,9 @@ jobs:
       # Download ops package ARM64
       - name: Download ops package ARM64
         run: |
-          ops pkg get AngeloR
+          ops pkg get AngeloRubens/TemurinJREarm64Linux:25.0.1 --arch arm64
+
+      # Load / boot package ARM64 via QEMU
+      - name: Load ops package ARM64 via QEMU
+        run: |
+          ops pkg load AngeloRubens/TemurinJREarm64Linux:25.0.1 --arch arm64
