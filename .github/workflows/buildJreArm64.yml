@@ -33,13 +33,18 @@ jobs:
     - name: Ensure QEMU binaries are in PATH
       run: |
         mkdir -p $HOME/.ops/bin
-        sudo ln -sf /usr/bin/qemu-aarch64-static $HOME/.ops/bin/qemu-aarch64
+        cp /usr/bin/qemu-aarch64-static $HOME/.ops/bin/qemu-aarch64
+        chmod +x $HOME/.ops/bin/qemu-aarch64
          # Controllo se il binario è accessibile
         echo "QEMU aarch64 path: $(which qemu-aarch64 || echo 'Not found')"
     
         # Versione QEMU
         qemu-aarch64 --version
-        
+
+    - name: Verify QEMU for ops
+      run: |
+        $HOME/.ops/bin/qemu-aarch64 --version
+            
     # Install ops
     - name: Install ops (NanoVMs)
       run: |
