@@ -87,14 +87,14 @@ jobs:
       run: |
         cd ${{ env.PACKAGE_NAME }}_${{ env.SEMERU_VERSION }}
         cat > package.manifest << 'EOF'
-        {
-          "Program": "/sysroot/jdk-${{ env.SEMERU_VERSION }}+8-jre/bin/java",
-          "Args": ["java"],
-          "Env": {
-            "JAVA_HOME": "/sysroot/jdk-${{ env.SEMERU_VERSION }}+8-jre"
-          },
-          "Version": "${{ env.SEMERU_VERSION }}"
-        }
+           {
+            "Program": "jdk-25.0.1+8-openj9/bin/java",
+            "Args": ["java"],
+            "Env": {
+              "JAVA_HOME": "jdk-25.0.1+8-openj9"
+            },
+            "Version": "25.0.1"
+           }
         EOF
         cat package.manifest
 
