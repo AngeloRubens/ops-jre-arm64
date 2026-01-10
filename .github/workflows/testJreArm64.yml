@@ -86,8 +86,7 @@ jobs:
           mkdir -p ~/.ops/images
           cat > ~/.ops/images/java-config.json <<EOF
           {
-            "Name": "java",
-            "BaseVolumeSz": "2g"
+            "BaseVolumeSz": "1g"
           }
           EOF
           echo "Generated config.json:"
@@ -96,4 +95,4 @@ jobs:
       # Load / boot package ARM64 via QEMU
       - name: Load ops package ARM64 via QEMU
         run: |
-          ops pkg load AngeloRubens/TemurinJREarm64Linux:25.0.1 --arch arm64 -c ~/.ops/images/java-config.json --nightly --verbose --trace
+          ops pkg load AngeloRubens/TemurinJREarm64Linux:25.0.1 --arch arm64 -c ~/.ops/images/java-config.json --nightly 
