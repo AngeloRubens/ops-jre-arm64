@@ -1,0 +1,15 @@
+jobs:
+  test-arm64:
+    runs-on: ubuntu-24.04-arm   # <- qui specifichi ARM64
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Ops
+        run: curl https://ops.city/get.sh -sSfL | sh
+      - name: Add Ops to PATH
+        run: echo "$HOME/.ops/bin" >> $GITHUB_PATH
+      - name: Check Ops version
+        run: ops version
+      - name: Download package ARM64
+        run: ops pkg get AngeloRubens/TemurinJREarm64Linux:25.0.1 --arch arm64
+      - name: Load package ARM64
+        run: ops pkg load AngeloRubens/TemurinJREarm64Linux:25.0.1 --arch arm64
