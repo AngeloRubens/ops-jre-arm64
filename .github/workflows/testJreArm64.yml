@@ -51,14 +51,14 @@ jobs:
         run: ops version
 
       # Prepare Ops nightly ARM64 cache (per guida Graviton)
-      - name: Prepare Ops ARM64 kernel (dynamic version)
+      - name: Prepare Ops ARM64 kernel (dynamic Nanos version)
         run: |
           set -e
       
-          OPS_VERSION=$(ops version | awk '{print $3}')
-          OPS_DIR="$HOME/.ops/${OPS_VERSION}-arm"
+          NANOS_VERSION=$(ops version | awk '/Nanos version:/ {print $3}')
+          OPS_DIR="$HOME/.ops/${NANOS_VERSION}-arm"
       
-          echo "Detected Ops version: $OPS_VERSION"
+          echo "Detected Nanos version: $NANOS_VERSION"
           echo "Using Ops directory: $OPS_DIR"
       
           mkdir -p "$OPS_DIR"
@@ -73,6 +73,8 @@ jobs:
       
           echo "Final Ops ARM64 layout:"
           ls -lh "$OPS_DIR"
+
+          
 
 
 
