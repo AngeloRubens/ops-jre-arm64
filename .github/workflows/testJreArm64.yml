@@ -13,6 +13,12 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+      - name: Verify preinstalled Java
+        run: |
+          echo "Checking Java runtime..."
+          java -version || echo "Java not found"
+          javac -version || echo "Javac not found"
+          echo "JAVA_HOME is set to: $JAVA_HOME"
 
       # Install QEMU user-mode + system emulation + utilities
       - name: Install QEMU and utilities
