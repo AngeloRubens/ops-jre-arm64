@@ -81,8 +81,19 @@ jobs:
       - name: Download ops package ARM64
         run: |
           ops pkg get AngeloRubens/TemurinJREarm64Linux:25.0.1 --arch arm64 --nightly
+      - name: Create Ops config.json with 2GB root volume
+        run: |
+          mkdir -p ~/.ops/images
+          cat > ~/.ops/images/java-config.json <<EOF
+          {
+            "Name": "java",
+            "BaseVolumeSz": "2g"
+          }
+          EOF
+          echo "Generated config.json:"
+          cat ~/.ops/images/java-config.json    
 
       # Load / boot package ARM64 via QEMU
       - name: Load ops package ARM64 via QEMU
         run: |
-          ops pkg load AngeloRubens/TemurinJREarm64Linux:25.0.1 --arch arm64 --nightly --verbose --trace
+          ops pkg load AngeloRubens/TemurinJREarm64Linux:25.0.1 --arch arm64 -c ~/.ops/images/java-config.json --nightly --verbose --trace
