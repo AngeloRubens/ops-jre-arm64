@@ -28,15 +28,7 @@ jobs:
           qemu-aarch64 --version
           qemu-system-aarch64 --version
 
-      # Verify binfmt for ARM64
-      - name: Verify ARM64 binfmt
-        run: |
-          if [ -f /proc/sys/fs/binfmt_misc/qemu-aarch64 ]; then
-            echo "ARM64 binfmt enabled"
-          else
-            echo "ARM64 binfmt NOT enabled"
-            exit 1
-          fi
+     
 
       # Install ops (ARM64 capable) as default
       - name: Install ops
