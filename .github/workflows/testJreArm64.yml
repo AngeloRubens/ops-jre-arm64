@@ -107,6 +107,7 @@ jobs:
           
           # Esegui OPS e salva tutto l'output
           ops pkg load AngeloRubens/TemurinJREarm64Linux:25.0.1 \
+            --accel false \
             --arch arm64 \
             -c ~/.ops/images/java-config.json \
             --nightly \
