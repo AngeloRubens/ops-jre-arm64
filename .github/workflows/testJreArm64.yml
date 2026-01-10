@@ -54,18 +54,21 @@ jobs:
       - name: Prepare Ops nightly ARM64 cache
         run: |
           mkdir -p ~/.ops/nightly
+
           echo "Cleaning x86 artifacts from Ops cache"
           rm -rf ~/.ops/nightly/bootx64.efi ~/.ops/nightly/k* \
-            ~/.ops/nightly/mkfs ~/.ops/nightly/dump || true
-
-          echo "Downloading latest Nanos nightly ARM64"
+                 ~/.ops/nightly/mkfs ~/.ops/nightly/dump || true
+          
+          echo "Downloading Nanos nightly"
           curl -L https://storage.googleapis.com/nanos/release/nightly/nanos-nightly-linux-virt.tar.gz \
-            -o /tmp/nanos-arm64.tar.gz
-
-          tar -xzf /tmp/nanos-arm64.tar.gz -C /tmp
-          cp -v /tmp/nanos-*/* ~/.ops/nightly/
+            -o /tmp/nanos-nightly.tar.gz
+          
+          echo "Extracting Nanos nightly into Ops cache"
+          tar -xzf /tmp/nanos-nightly.tar.gz -C ~/.ops/nightly
+          
           echo "Ops nightly cache content:"
           ls -lh ~/.ops/nightly
+
 
       # Download ops package ARM64
       - name: Download ops package ARM64
