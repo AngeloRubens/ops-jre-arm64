@@ -71,31 +71,8 @@ jobs:
           echo "$HOME/.ops/bin" >> $GITHUB_PATH
       # Step separato: check ops version
       - name: Check Ops version
-        run: ops version
+        run: ops version --nightly
 
-      # Prepare Ops nightly ARM64 cache (per guida Graviton)
-      - name: Prepare Ops ARM64 kernel (dynamic Nanos version)
-        run: |
-          set -e
-      
-          NANOS_VERSION=$(ops version | awk '/Nanos version:/ {print $3}')
-          OPS_DIR="$HOME/.ops/${NANOS_VERSION}-arm"
-      
-          echo "Detected Nanos version: $NANOS_VERSION"
-          echo "Using Ops directory: $OPS_DIR"
-      
-          mkdir -p "$OPS_DIR"
-          rm -rf "$OPS_DIR"/*
-      
-          echo "Downloading Nanos ARM64 kernel bundle"
-          curl -L https://storage.googleapis.com/nanos/release/nightly/nanos-nightly-linux-virt.tar.gz \
-            -o /tmp/nanos-arm64.tar.gz
-      
-          echo "Extracting kernel into Ops directory"
-          tar -xzf /tmp/nanos-arm64.tar.gz -C "$OPS_DIR"
-      
-          echo "Final Ops ARM64 layout:"
-          ls -lh "$OPS_DIR"
 
           
 
