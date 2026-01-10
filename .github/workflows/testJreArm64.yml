@@ -112,6 +112,7 @@ jobs:
           {
             "BaseVolumeSz": "1g",
             "Args": ["java",
+              "-XshowSettings",
               "-XX:+UnlockDiagnosticVMOptions",
               "-XX:-UseDCZVA"
             ]
