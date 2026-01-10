@@ -85,4 +85,4 @@ jobs:
       # Load / boot package ARM64 via QEMU
       - name: Load ops package ARM64 via QEMU
         run: |
-          ops pkg load AngeloRubens/TemurinJREarm64Linux:25.0.1 --arch arm64 --nightly
+          ops pkg load AngeloRubens/TemurinJREarm64Linux:25.0.1 --arch arm64 --nightly --verbose --trace
