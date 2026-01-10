@@ -42,11 +42,7 @@ jobs:
     
 
 
-- name: Verify Java installation
-  run: |
-    echo "Java Home: $JAVA_HOME"
-    java -version
-    which java    
+ 
 
       # Install QEMU user-mode + system emulation + utilities
       - name: Install QEMU and utilities
