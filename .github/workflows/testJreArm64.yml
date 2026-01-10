@@ -51,23 +51,29 @@ jobs:
         run: ops version
 
       # Prepare Ops nightly ARM64 cache (per guida Graviton)
-      - name: Prepare Ops nightly ARM64 cache
+      - name: Prepare Ops ARM64 kernel (dynamic version)
         run: |
-          mkdir -p ~/.ops/nightly
-
-          echo "Cleaning x86 artifacts from Ops cache"
-          rm -rf ~/.ops/nightly/bootx64.efi ~/.ops/nightly/k* \
-                 ~/.ops/nightly/mkfs ~/.ops/nightly/dump || true
-          
-          echo "Downloading Nanos nightly"
+          set -e
+      
+          OPS_VERSION=$(ops version | awk '{print $3}')
+          OPS_DIR="$HOME/.ops/${OPS_VERSION}-arm"
+      
+          echo "Detected Ops version: $OPS_VERSION"
+          echo "Using Ops directory: $OPS_DIR"
+      
+          mkdir -p "$OPS_DIR"
+          rm -rf "$OPS_DIR"/*
+      
+          echo "Downloading Nanos ARM64 kernel bundle"
           curl -L https://storage.googleapis.com/nanos/release/nightly/nanos-nightly-linux-virt.tar.gz \
-            -o /tmp/nanos-nightly.tar.gz
-          
-          echo "Extracting Nanos nightly into Ops cache"
-          tar -xzf /tmp/nanos-nightly.tar.gz -C ~/.ops/nightly
-          
-          echo "Ops nightly cache content:"
-          ls -lh ~/.ops/nightly
+            -o /tmp/nanos-arm64.tar.gz
+      
+          echo "Extracting kernel into Ops directory"
+          tar -xzf /tmp/nanos-arm64.tar.gz -C "$OPS_DIR"
+      
+          echo "Final Ops ARM64 layout:"
+          ls -lh "$OPS_DIR"
+
 
 
       # Download ops package ARM64
