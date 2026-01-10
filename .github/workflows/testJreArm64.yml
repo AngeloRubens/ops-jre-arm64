@@ -80,9 +80,9 @@ jobs:
       # Download ops package ARM64
       - name: Download ops package ARM64
         run: |
-          ops pkg get AngeloRubens/TemurinJREarm64Linux:25.0.1 --arch arm64
+          ops pkg get AngeloRubens/TemurinJREarm64Linux:25.0.1 --arch arm64 --nightly
 
       # Load / boot package ARM64 via QEMU
       - name: Load ops package ARM64 via QEMU
         run: |
-          ops pkg load AngeloRubens/TemurinJREarm64Linux:25.0.1 --arch arm64
+          ops pkg load AngeloRubens/TemurinJREarm64Linux:25.0.1 --arch arm64 --nightly
