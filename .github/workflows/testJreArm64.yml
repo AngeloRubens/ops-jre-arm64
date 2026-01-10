@@ -71,7 +71,7 @@ jobs:
           echo "$HOME/.ops/bin" >> $GITHUB_PATH
       # Step separato: check ops version
       - name: Check Ops version
-        run: ops version --nightly
+        run: ops version
 
 
           
