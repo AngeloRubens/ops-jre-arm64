@@ -63,8 +63,7 @@ jobs:
           mkdir -p ~/.ops/images
           cat > ~/.ops/images/java-config.json <<EOF
           {
-            "BaseVolumeSz": "1g",
-            "Args": ["java","-version"]
+            "Args": ["-XshowSettings:all","-version"]
           }
           EOF
           echo "Generated config.json:"
