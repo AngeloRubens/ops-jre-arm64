@@ -23,10 +23,9 @@ jobs:
       - name: Download and test Temurin JRE 25
         run: |
           # Scarica la JRE
-          wget https://github.com/ibmruntimes/semeru25-binaries/releases/download/jdk-25.0.1%2B8_openj9-0.56.0/ibm-semeru-open-jdk_x64_linux_25.0.1_8_openj9-0.56.0.tar.gz
-          
+          wget https://github.com/ibmruntimes/semeru25-binaries/releases/download/jdk-25.0.1%2B8_openj9-0.56.0/ibm-semeru-open-jdk_aarch64_linux_25.0.1_8_openj9-0.56.0.tar.gz
           # Estrai l'archivio
-          tar -xzf ibm-semeru-open-jdk_x64_linux_25.0.1_8_openj9-0.56.0.tar.gz
+          tar -xzf ibm-semeru-open-jdk_aarch64_linux_25.0.1_8_openj9-0.56.0.tar.gz
           
           # Trova la directory estratta (di solito jdk-25.0.1+8-jre)
           JRE_DIR=$(find . -maxdepth 1 -type d -name "jdk-*-jre" | head -n 1)
