@@ -5,13 +5,13 @@ on:
 
 env:
   VERSION: 25.0.1
-  PACKAGE_BASENAME: TemurinJREarm64Linux
+  PACKAGE_BASENAME: SemeruJREarm64Linux
   JRE_DIR: jdk-25.0.1+8-jre
-  JRE_URL: https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.1%2B8/OpenJDK25U-jre_aarch64_linux_hotspot_25.0.1_8.tar.gz
+  JRE_URL: https://github.com/ibmruntimes/semeru25-binaries/releases/download/jdk-25.0.1%2B8_openj9-0.56.0/ibm-semeru-open-jre_aarch64_linux_25.0.1_8_openj9-0.56.0.tar.gz
 
 jobs:
   build-arm64-package:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout repository
@@ -47,11 +47,12 @@ jobs:
           # ----------------------------
           docker run --rm --platform linux/arm64 \
             -v $(pwd)/${PKG_NAME}/sysroot:/work \
-            ubuntu:22.04 bash -c "
+            ubuntu:24.04 bash -c "
               set -e
               apt-get update -qq
               apt-get install -y -qq libc6 libstdc++6 zlib1g
               mkdir -p /work/lib /work/lib64 /work/usr/lib/aarch64-linux-gnu
+              cp /lib/ld-musl-aarch64.so.1 /work/lib/
               cp /lib/ld-linux-aarch64.so.1 /work/lib/
               cp /lib/ld-linux-aarch64.so.1 /work/lib64/
               cp /lib/aarch64-linux-gnu/libc.so.6 /work/usr/lib/aarch64-linux-gnu/
@@ -65,7 +66,7 @@ jobs:
             "
 
           # ----------------------------
-          # Install Temurin JRE in sysroot
+          # Install Semeru JRE in sysroot
           # ----------------------------
           cd ${PKG_NAME}/sysroot
           wget -O jre.tar.gz ${JRE_URL}
@@ -94,7 +95,7 @@ jobs:
       - name: Create README
         run: |
           export PKG_NAME=${PACKAGE_BASENAME}_${VERSION}
-          echo "Temurin JRE ${VERSION} aarch64 Linux package for Nanos VM" > ${PKG_NAME}/README.md
+          echo "Semeru JRE ${VERSION} aarch64 Linux package for Nanos VM" > ${PKG_NAME}/README.md
 
       # ============================
       # Test (disabled by design)
@@ -102,7 +103,7 @@ jobs:
       - name: Test package with ops (minimal)
         if: false
         run: |
-          ops pkg load TemurinJREarm64Linux_${VERSION}
+          ops pkg load SemeruJREarm64Linux_${VERSION}
 
       # ============================
       # Create tarball
@@ -117,8 +118,8 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: TemurinJREarm64Linux_${{ env.VERSION }}
+          name: SemeruJREarm64Linux_${{ env.VERSION }}
           path: |
-            TemurinJREarm64Linux_${{ env.VERSION }}.tar.gz
-            TemurinJREarm64Linux_${{ env.VERSION }}.tar.gz.sha256
+            SemeruJREarm64Linux_${{ env.VERSION }}.tar.gz
+            SemeruJREarm64Linux_${{ env.VERSION }}.tar.gz.sha256
           retention-days: 30
