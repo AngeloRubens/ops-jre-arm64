@@ -8,7 +8,7 @@ on:
 
 jobs:
   test-arm64-qemu:
-    runs-on: ubuntu-22.04-arm
+    runs-on: ubuntu-24.04-arm
 
     steps:
       - name: Checkout repository
@@ -23,10 +23,10 @@ jobs:
       - name: Download and test Temurin JRE 25
         run: |
           # Scarica la JRE
-          wget https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.1%2B8/OpenJDK25U-jre_aarch64_linux_hotspot_25.0.1_8.tar.gz
+          wget https://github.com/ibmruntimes/semeru25-binaries/releases/download/jdk-25.0.1%2B8_openj9-0.56.0/ibm-semeru-open-jdk_x64_linux_25.0.1_8_openj9-0.56.0.tar.gz
           
           # Estrai l'archivio
-          tar -xzf OpenJDK25U-jre_aarch64_linux_hotspot_25.0.1_8.tar.gz
+          tar -xzf ibm-semeru-open-jdk_x64_linux_25.0.1_8_openj9-0.56.0.tar.gz
           
           # Trova la directory estratta (di solito jdk-25.0.1+8-jre)
           JRE_DIR=$(find . -maxdepth 1 -type d -name "jdk-*-jre" | head -n 1)
