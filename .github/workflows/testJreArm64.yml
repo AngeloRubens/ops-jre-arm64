@@ -88,11 +88,7 @@ jobs:
           cat > ~/.ops/images/java-config.json <<EOF
           {
             "BaseVolumeSz": "1g",
-            "Args": ["java","-Xint",
-              "-XshowSettings",
-              "-XX:+UnlockDiagnosticVMOptions",
-              "-XX:-UseDCZVA"
-            ]
+            "Args": ["java","-version"]
           }
           EOF
           echo "Generated config.json:"
@@ -107,12 +103,10 @@ jobs:
           
           # Esegui OPS e salva tutto l'output
           ops pkg load AngeloRubens/TemurinJREarm64Linux:25.0.1 \
-            --accel false \
             --arch arm64 \
             -c ~/.ops/images/java-config.json \
             --nightly \
-            --verbose \
-            --trace > ops_output.log 2>&1
+            --verbose > ops_output.log 2>&1
           
           # Salva exit code
           echo $? > ops_exit_code.txt
