@@ -21,13 +21,8 @@ jobs:
           sudo apt-get update
           
 
-      - name: Install ops
-        run: |
-          curl -L https://ops.city/get.sh | sh
-          echo "$HOME/.ops/bin" >> $GITHUB_PATH
 
-      - name: Verify ops
-        run: ops version
+     
 
       # ============================
       # Build musl sysroot (Alpine)
