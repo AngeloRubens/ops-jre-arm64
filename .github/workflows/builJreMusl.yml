@@ -1,0 +1,125 @@
+name: Build ARM64 JRE Package (Nanos - musl)
+
+on:
+  workflow_dispatch:
+
+env:
+  VERSION: 25.0.1
+  PACKAGE_BASENAME: JREarm64LinuxMusl
+  JRE_DIR: jre
+  JRE_URL: https://corretto.aws/downloads/resources/25.0.1.9.1/amazon-corretto-25.0.1.9.1-alpine-linux-aarch64.tar.gz
+
+jobs:
+  build-arm64-package:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install host tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget tar docker.io
+
+      - name: Install ops
+        run: |
+          curl -L https://ops.city/get.sh | sh
+          echo "$HOME/.ops/bin" >> $GITHUB_PATH
+
+      - name: Verify ops
+        run: ops version
+
+      # ============================
+      # Build musl sysroot (Alpine)
+      # ============================
+      - name: Prepare musl sysroot
+        run: |
+          PKG_NAME=${PACKAGE_BASENAME}_${VERSION}
+          mkdir -p ${PKG_NAME}/sysroot
+
+          docker run --rm --platform linux/arm64 \
+            -v $(pwd)/${PKG_NAME}/sysroot:/work \
+            alpine:3.23 sh -c "
+              set -e
+              apk add --no-cache musl zlib libstdc++ libgcc
+
+              mkdir -p /work/lib /work/lib64 /work/usr/lib
+
+              # dynamic loader (musl)
+              cp /lib/ld-musl-aarch64.so.1 /work/lib/
+              cp /lib/ld-musl-aarch64.so.1 /work/lib64/
+
+              # libc musl (includes pthread, dl, rt, m)
+              cp /lib/libc.musl-aarch64.so.1 /work/lib/
+
+              # gcc runtime
+              cp /usr/lib/libgcc_s.so.1 /work/usr/lib/
+
+              # c++ runtime
+              cp /usr/lib/libstdc++.so.6 /work/usr/lib/
+
+              # compression
+              cp /usr/lib/libz.so.1 /work/usr/lib/
+            "
+
+      # ============================
+      # Install JRE (musl)
+      # ============================
+      - name: Install JRE
+        run: |
+          PKG_NAME=${PACKAGE_BASENAME}_${VERSION}
+          cd ${PKG_NAME}/sysroot
+
+          wget -q -O jre.tar.gz ${JRE_URL}
+          mkdir -p ${JRE_DIR}
+          tar -xzf jre.tar.gz --strip-components=1 -C ${JRE_DIR}
+          rm jre.tar.gz
+
+      # ============================
+      # Verify Java (best effort)
+      # ============================
+      - name: Verify Java runtime
+        run: |
+          PKG_NAME=${PACKAGE_BASENAME}_${VERSION}
+          ${PKG_NAME}/sysroot/${JRE_DIR}/bin/java -version || true
+
+      # ============================
+      # package.manifest
+      # ============================
+      - name: Create package.manifest
+        run: |
+          PKG_NAME=${PACKAGE_BASENAME}_${VERSION}
+          cat > ${PKG_NAME}/package.manifest <<EOF
+          {
+            "Program": "/${JRE_DIR}/bin/java",
+            "Args": ["-version"],
+            "Env": {
+              "JAVA_HOME": "/${JRE_DIR}"
+            },
+            "Version": "${VERSION}"
+          }
+          EOF
+
+      - name: Create README
+        run: |
+          PKG_NAME=${PACKAGE_BASENAME}_${VERSION}
+          echo "ARM64 musl JRE for Nanos unikernel (Alpine 3.23)" > ${PKG_NAME}/README.md
+
+      # ============================
+      # Package & artifact
+      # ============================
+      - name: Create tarball & checksum
+        run: |
+          PKG_NAME=${PACKAGE_BASENAME}_${VERSION}
+          tar czf ${PKG_NAME}.tar.gz ${PKG_NAME}
+          sha256sum ${PKG_NAME}.tar.gz > ${PKG_NAME}.tar.gz.sha256
+          cat ${PKG_NAME}.tar.gz.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: JREarm64LinuxMusl_${{ env.VERSION }}
+          path: |
+            JREarm64LinuxMusl_${{ env.VERSION }}.tar.gz
+            JREarm64LinuxMusl_${{ env.VERSION }}.tar.gz.sha256
+          retention-days: 30
