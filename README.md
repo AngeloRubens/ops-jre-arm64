@@ -80,7 +80,8 @@ By removing unnecessary layers, unikernels reduce boot time, memory footprint, a
 
 ## Quarkus, Semeru, and Nanos on AWS Nitro Graviton
 
-![Quarkus + Semeru + Nanos on AWS](quarkus-semeru-nanos.png)
+<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/5abe0556-690e-4e39-827b-a6090a64dc32" />
+
 
 Quarkus is particularly well suited for this model thanks to its fast startup and low memory usage, while IBM Semeru provides a production-grade OpenJDK runtime. Combined with Nanos, the result is a highly efficient Java unikernel.
 
