@@ -1,6 +1,7 @@
 # The Cloud Evolves and Meets Unikernels: Java, Semeru Runtime, and Quarkus on ARM64 AWS Graviton with Nanos Unikernel
 
-![Hero Image – Cloud, Java, and Unikernels](hero-image.png)
+<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/2c957ea8-2c6b-4caa-86f8-5adeb9e8bedc" />
+
 
 ## Java and Jakarta EE Truly Meet Unikernels
 
