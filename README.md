@@ -47,7 +47,8 @@ This demonstrates that Nanos unikernels are **hypervisor-agnostic** and cloud-in
 
 ## Architectural Diagram of the PoC
 
-![PoC Architecture Diagram](poc-diagram.png)
+<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/3d2ee606-59e5-4287-af6f-78d04ffbcef1" />
+
 
 The application runs as a single unikernel image directly on top of the AWS Nitro hypervisor, without a guest operating system, container runtime, or Kubernetes node.
 
