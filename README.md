@@ -184,6 +184,8 @@ With Nanos Unikernel, Java, Jakarta EE, Quarkus, and IBM Semeru Runtime can full
 
 Reference:
 
+**The poc on aws Free Tier t4g.small until 31-Dec-2026: http://3.127.237.11:8080/index.xhtml**
+
 **FooJay Link: https://foojay.io/today/java-jakarta-ee-and-the-evolution-of-the-cloud-with-nanos-unikernel/**
 
 **Nanovms Link: https://nanovms.com/**
