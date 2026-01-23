@@ -56,7 +56,7 @@ The application runs as a single unikernel image directly on top of the AWS Nitr
 
 ## Containers vs Unikernels: A Stack Comparison
 
-![Container vs Unikernel Stack](container-vs-unikernel.png)
+<img width="600" height="379" alt="image" src="https://github.com/user-attachments/assets/2462ae08-9dc9-40b6-ae49-d9123294cdae" />
 
 ### Container Stack
 
