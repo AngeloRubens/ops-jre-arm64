@@ -185,4 +185,7 @@ With Nanos Unikernel, Java, Jakarta EE, Quarkus, and IBM Semeru Runtime can full
 Reference:
 
 **FooJay Link: https://foojay.io/today/java-jakarta-ee-and-the-evolution-of-the-cloud-with-nanos-unikernel/**
+
 **Nanovms Link: https://nanovms.com/**
+
+**Semeru JRE Repo ops nanos package https://repo.ops.city/v2/packages/AngeloRubens/SemeruJREarm64Linux/25.0.1/arm64/show**
