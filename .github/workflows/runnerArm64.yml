@@ -1,3 +1,10 @@
+name: Test temurin arm64
+
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
 jobs:
   test-arm64:
     runs-on: ubuntu-24.04-arm   # <- qui specifichi ARM64
