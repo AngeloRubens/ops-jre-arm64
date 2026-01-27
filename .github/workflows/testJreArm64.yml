@@ -47,27 +47,7 @@ jobs:
           echo "$HOME/.ops/bin" >> $GITHUB_PATH
       # Step separato: check ops version
       - name: Check Ops version
-        run: ops version
-
-
-          
-
-
-
-      # Download ops package ARM64
-      - name: Download ops package ARM64
-        run: |
-          ops pkg get AngeloRubens/TemurinJREarm64Linux:25.0.1 --arch arm64 --nightly
-      - name: Create Ops config.json with 2GB root volume
-        run: |
-          mkdir -p ~/.ops/images
-          cat > ~/.ops/images/java-config.json <<EOF
-          {
-            "Args": ["-XshowSettings:all","-version"]
-          }
-          EOF
-          echo "Generated config.json:"
-          cat ~/.ops/images/java-config.json    
+        run: ops version      
 
       - name: Run OPS and capture all output
         id: ops_run
@@ -77,9 +57,9 @@ jobs:
           date
           
           # Esegui OPS e salva tutto l'output
-          ops pkg load AngeloRubens/SemeruJREarm64Linux:25.0.1 \
+          ops pkg load AngeloRubens/TemurinJREarm64Linux:25.0.1 \
             --arch arm64 \
-            -c ~/.ops/images/java-config.json \
+            -a -XshowSettings:properties \
             --nightly \
             --verbose 
           
