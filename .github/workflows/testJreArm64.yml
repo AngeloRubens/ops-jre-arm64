@@ -58,7 +58,7 @@ jobs:
             --arch arm64 \
             -a -XshowSettings:properties \
             --nightly \
-            --verbose 
+            --verbose --show-debug 
           
       
       
