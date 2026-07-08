@@ -1,0 +1,205 @@
+name: Inspect active JVM options on Nanos (ARM64)
+
+# Runs a JVM *inside* a Nanos unikernel (via ops) and reports which
+# hardware-acceleration features it actually uses.
+#
+#   HotSpot (Temurin / Corretto):
+#     1) -Xlog:os+cpu        -> CPU features the guest sees (aes, pmull, sha2, crc32...)
+#     2) -XX:+PrintFlagsFinal -> intrinsics the JIT enables (UseAES, UseSHA256Intrinsics...)
+#
+#   OpenJ9 (Semeru):
+#     -XX:+PrintFlagsFinal exists but only prints a small HotSpot-compat subset
+#     (no Use*Intrinsics — they don't exist in OpenJ9's JIT). Instead OpenJ9 accelerates
+#     crypto via native OpenSSL, on by default (-Djdk.nativeCrypto). We confirm it by
+#     EXERCISING crypto (keytool: RSA keygen + SHA) under -Djdk.nativeCryptoTrace=true
+#     and reading the trace that proves the OpenSSL natives are loaded/used.
+
+on:
+  workflow_dispatch:
+    inputs:
+      engine:
+        description: "Which JVM engine to inspect"
+        type: choice
+        options: [both, hotspot, openj9]
+        default: both
+      hotspot_package:
+        description: "HotSpot ops package"
+        default: "AngeloRubens/TemurinJREarm64Linux:25.0.1"
+      openj9_package:
+        description: "OpenJ9/Semeru ops package"
+        default: "AngeloRubens/SemeruJREarm64Linux:25.0.1"
+      arch:
+        description: "target arch"
+        default: "arm64"
+
+jobs:
+  # ================================================================
+  # HotSpot: CPU features + intrinsic flags
+  # ================================================================
+  inspect-hotspot:
+    if: ${{ inputs.engine == 'hotspot' || inputs.engine == 'both' }}
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install QEMU and utilities
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            qemu-system qemu-user qemu-user-static qemu-system-arm qemu-system-aarch64 \
+            binfmt-support
+          sudo ln -sf "$(which qemu-aarch64-static)" /usr/local/bin/qemu-aarch64
+
+      - name: Install ops
+        run: curl https://ops.city/get.sh -sSfL | sh
+
+      - name: Add ops to PATH
+        run: echo "$HOME/.ops/bin" >> $GITHUB_PATH
+
+      - name: Check ops version
+        run: ops version
+
+      - name: Get package
+        run: ops pkg get "${{ inputs.hotspot_package }}" --arch "${{ inputs.arch }}"
+
+      - name: Probe CPU features (-Xlog:os+cpu)
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          ops pkg load "${{ inputs.hotspot_package }}" --arch "${{ inputs.arch }}" \
+            -a -Xlog:os+cpu=debug \
+            -a -version \
+            2>&1 | tee cpu-features.txt
+
+      - name: Dump final VM flags (-XX:+PrintFlagsFinal)
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          ops pkg load "${{ inputs.hotspot_package }}" --arch "${{ inputs.arch }}" \
+            -a -XX:+UnlockDiagnosticVMOptions \
+            -a -XX:+PrintFlagsFinal \
+            -a -version \
+            2>&1 | tee flags-final.txt
+
+      - name: Summarize (HotSpot)
+        if: always()
+        run: |
+          {
+            echo "## HotSpot hardware-acceleration report"
+            echo ""
+            echo "Package: \`${{ inputs.hotspot_package }}\` (arch \`${{ inputs.arch }}\`)"
+            echo ""
+            echo "### CPU features seen by the guest"
+            echo '```'
+            grep -iE 'features|cpu' cpu-features.txt 2>/dev/null | head -n 20 || echo "(no CPU line captured)"
+            echo '```'
+            echo "### Relevant intrinsic flags"
+            echo '```'
+            grep -iE 'Use(AES|SHA|GHASH|CRC32|MD5|Neon|FMA|PopCount|VectorizedMismatch|Montgomery|Adler32)' flags-final.txt 2>/dev/null | sort \
+              || echo "(no flags captured)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload HotSpot reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jvm-options-hotspot
+          path: |
+            cpu-features.txt
+            flags-final.txt
+          retention-days: 30
+
+  # ================================================================
+  # OpenJ9: native OpenSSL crypto acceleration
+  # ================================================================
+  inspect-openj9:
+    if: ${{ inputs.engine == 'openj9' || inputs.engine == 'both' }}
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install QEMU and utilities
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            qemu-system qemu-user qemu-user-static qemu-system-arm qemu-system-aarch64 \
+            binfmt-support
+          sudo ln -sf "$(which qemu-aarch64-static)" /usr/local/bin/qemu-aarch64
+
+      - name: Install ops
+        run: curl https://ops.city/get.sh -sSfL | sh
+
+      - name: Add ops to PATH
+        run: echo "$HOME/.ops/bin" >> $GITHUB_PATH
+
+      - name: Check ops version
+        run: ops version
+
+      - name: Get package
+        run: ops pkg get "${{ inputs.openj9_package }}" --arch "${{ inputs.arch }}"
+
+      # 1) List which native-crypto properties OpenJ9 exposes/enables.
+      #    OpenJ9's -XX:+PrintFlagsFinal only prints a small HotSpot-compat subset,
+      #    but we capture it anyway for reference.
+      - name: Dump OpenJ9 PrintFlagsFinal subset (reference)
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          ops pkg load "${{ inputs.openj9_package }}" --arch "${{ inputs.arch }}" \
+            -a -XX:+PrintFlagsFinal \
+            -a -version \
+            2>&1 | tee openj9-flags.txt
+
+      # 2) EXERCISE crypto so the native-crypto trace fires.
+      #    We drive keytool via its main class (ships in the JRE): RSA keygen + SHA digest.
+      #    -Djdk.nativeCrypto is on by default; -Djdk.nativeCryptoTrace=true prints the proof.
+      #    keytool may fail writing the keystore on a read-only unikernel FS, but the crypto
+      #    (and its trace) already happened by then -> continue-on-error.
+      - name: Probe native OpenSSL crypto (-Djdk.nativeCryptoTrace)
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          ops pkg load "${{ inputs.openj9_package }}" --arch "${{ inputs.arch }}" \
+            -a -Djdk.nativeCrypto=true \
+            -a -Djdk.nativeCryptoTrace=true \
+            -a sun.security.tools.keytool.Main \
+            -a -genkeypair -a -alias -a probe \
+            -a -keyalg -a RSA -a -keysize -a 2048 \
+            -a -sigalg -a SHA256withRSA \
+            -a -dname -a CN=probe \
+            -a -storepass -a changeit \
+            -a -keystore -a /probe.p12 -a -storetype -a PKCS12 \
+            2>&1 | tee openj9-nativecrypto.txt
+
+      - name: Summarize (OpenJ9)
+        if: always()
+        run: |
+          {
+            echo "## OpenJ9 native-crypto report"
+            echo ""
+            echo "Package: \`${{ inputs.openj9_package }}\` (arch \`${{ inputs.arch }}\`)"
+            echo ""
+            echo "### Native OpenSSL crypto trace"
+            echo "Lines mentioning OpenSSL / native crypto being loaded or used:"
+            echo '```'
+            grep -iE 'openssl|native|crypto' openj9-nativecrypto.txt 2>/dev/null | head -n 40 \
+              || echo "(no native-crypto trace captured — is native crypto disabled, or did keytool fail before any crypto?)"
+            echo '```'
+            echo "### PrintFlagsFinal subset (reference)"
+            echo '```'
+            grep -iE 'native|crypto|Heap' openj9-flags.txt 2>/dev/null | head -n 20 || echo "(nothing captured)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload OpenJ9 reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jvm-options-openj9
+          path: |
+            openj9-flags.txt
+            openj9-nativecrypto.txt
+          retention-days: 30
