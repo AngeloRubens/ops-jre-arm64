@@ -240,24 +240,92 @@ jobs:
             -a -keystore -a /probe.p12 -a -storetype -a PKCS12 \
             2>&1 | tee openj9-nativecrypto.txt
 
+      # 3) VM & system settings (processors, memory, os.arch) — supported by the
+      #    OpenJDK launcher on OpenJ9 too.
+      - name: Probe VM & system settings (-XshowSettings:all)
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          ops pkg load "${{ inputs.openj9_package }}" --arch "${{ inputs.arch }}" --nightly \
+            -a -XshowSettings:all \
+            -a -version \
+            2>&1 | tee openj9-settings.txt
+
+      # 4) Detailed build / JIT / GC level of the OpenJ9 VM.
+      - name: Probe internal version (-Xinternalversion)
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          ops pkg load "${{ inputs.openj9_package }}" --arch "${{ inputs.arch }}" --nightly \
+            -a -Xinternalversion \
+            2>&1 | tee openj9-internal.txt
+
+      # 5) GC/runtime config OpenJ9 chose: the -verbose:gc <initialized> block reports
+      #    gc policy, compressed refs, NUMA, region/heap sizes, and CPU counts.
+      - name: Probe GC & runtime init (-verbose:gc)
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          ops pkg load "${{ inputs.openj9_package }}" --arch "${{ inputs.arch }}" --nightly \
+            -a -verbose:gc \
+            -a -version \
+            2>&1 | tee openj9-gc.txt
+
       - name: Summarize (OpenJ9)
         if: always()
         run: |
           {
-            echo "## OpenJ9 native-crypto report"
+            echo "## OpenJ9: does the JVM use the hardware fully on Nanos?"
             echo ""
             echo "Package: \`${{ inputs.openj9_package }}\` (arch \`${{ inputs.arch }}\`)"
             echo ""
-            echo "### Native OpenSSL crypto trace"
-            echo "Lines mentioning OpenSSL / native crypto being loaded or used:"
+            echo "> OpenJ9 has a different JIT than HotSpot: it does NOT expose \`Use*Intrinsics\`"
+            echo "> flags for AES/SHA/etc. Hardware crypto goes through native OpenSSL"
+            echo "> (\`-Djdk.nativeCrypto\`, on by default). Other hardware use (SIMD, atomics,"
+            echo "> cache-line zeroing) is decided internally by the JIT and isn't user-visible"
+            echo "> as flags — so the strongest signals we can get are the OpenSSL trace, the"
+            echo "> reported CPU/memory, and the JIT/GC build level."
+            echo ""
+
+            echo "### 1. VM build / JIT & GC level (-Xinternalversion + -version)"
             echo '```'
-            grep -iE 'openssl|native|crypto' openj9-nativecrypto.txt 2>/dev/null | head -n 40 \
+            head -n 20 openj9-internal.txt 2>/dev/null || echo "(nothing captured)"
+            echo '```'
+
+            echo "### 2. Native OpenSSL crypto (the real hardware-crypto signal)"
+            echo "Trace lines showing whether the OpenSSL natives loaded (and which version) and were used:"
+            echo '```'
+            grep -iE 'openssl|native.?crypto|crypto.?library|load (succeed|fail)|using .*for' openj9-nativecrypto.txt 2>/dev/null | head -n 40 \
               || echo "(no native-crypto trace captured — is native crypto disabled, or did keytool fail before any crypto?)"
             echo '```'
-            echo "### PrintFlagsFinal subset (reference)"
+
+            echo "### 3. GC & runtime config the guest reported (-verbose:gc <initialized>)"
+            echo "Look for gcPolicy, compressedRefs, numa, and CPU/thread counts."
+            echo '```'
+            grep -iE 'gcPolicy|attribute|compressedRefs|numa|cpu|region|maxHeap|initHeap|physicalMemory|<initialized|concurrentScavenge' openj9-gc.txt 2>/dev/null | head -n 40 \
+              || echo "(nothing captured)"
+            echo '```'
+
+            echo "### 4. Processors & memory the guest reported (-XshowSettings:all)"
+            echo "If available processors = 1 and memory is tiny, the JIT/GC scale down accordingly."
+            echo '```'
+            grep -iE 'processor|memory|heap|os\.|sun\.arch|cpu|available' openj9-settings.txt 2>/dev/null | head -n 30 \
+              || echo "(no settings captured)"
+            echo '```'
+
+            echo "### 5. PrintFlagsFinal subset (reference — OpenJ9 prints little here)"
             echo '```'
             grep -iE 'native|crypto|Heap' openj9-flags.txt 2>/dev/null | head -n 20 || echo "(nothing captured)"
             echo '```'
+
+            echo "### Verdict (native crypto)"
+            if grep -qiE 'openssl|load succeed|using .*(openssl|native)' openj9-nativecrypto.txt 2>/dev/null; then
+              echo "- ✅ **OpenJ9 native OpenSSL crypto appears ACTIVE** — hardware-accelerated crypto is in use."
+            else
+              echo "- ❓ **No OpenSSL native-crypto evidence captured.** Either native crypto is disabled,"
+              echo "  the trace wording differs from our filter, or keytool failed before exercising crypto."
+              echo "  Check the raw \`openj9-nativecrypto.txt\` artifact."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload OpenJ9 reports
@@ -268,4 +336,7 @@ jobs:
           path: |
             openj9-flags.txt
             openj9-nativecrypto.txt
+            openj9-settings.txt
+            openj9-internal.txt
+            openj9-gc.txt
           retention-days: 30
