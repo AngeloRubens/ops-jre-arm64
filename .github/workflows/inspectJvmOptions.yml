@@ -67,7 +67,7 @@ jobs:
         continue-on-error: true
         run: |
           set -o pipefail
-          ops pkg load "${{ inputs.hotspot_package }}" --arch "${{ inputs.arch }}" \
+          ops pkg load "${{ inputs.hotspot_package }}" --arch "${{ inputs.arch }}" --nightly \
             -a -Xlog:os+cpu=debug \
             -a -version \
             2>&1 | tee cpu-features.txt
@@ -76,7 +76,7 @@ jobs:
         continue-on-error: true
         run: |
           set -o pipefail
-          ops pkg load "${{ inputs.hotspot_package }}" --arch "${{ inputs.arch }}" \
+          ops pkg load "${{ inputs.hotspot_package }}" --arch "${{ inputs.arch }}" --nightly \
             -a -XX:+UnlockDiagnosticVMOptions \
             -a -XX:+PrintFlagsFinal \
             -a -version \
@@ -148,7 +148,7 @@ jobs:
         continue-on-error: true
         run: |
           set -o pipefail
-          ops pkg load "${{ inputs.openj9_package }}" --arch "${{ inputs.arch }}" \
+          ops pkg load "${{ inputs.openj9_package }}" --arch "${{ inputs.arch }}" --nightly \
             -a -XX:+PrintFlagsFinal \
             -a -version \
             2>&1 | tee openj9-flags.txt
@@ -162,7 +162,7 @@ jobs:
         continue-on-error: true
         run: |
           set -o pipefail
-          ops pkg load "${{ inputs.openj9_package }}" --arch "${{ inputs.arch }}" \
+          ops pkg load "${{ inputs.openj9_package }}" --arch "${{ inputs.arch }}" --nightly \
             -a -Djdk.nativeCrypto=true \
             -a -Djdk.nativeCryptoTrace=true \
             -a sun.security.tools.keytool.Main \
