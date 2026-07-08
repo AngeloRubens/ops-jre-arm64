@@ -34,6 +34,114 @@ on:
 
 jobs:
   # ================================================================
+  # Diagnostics: what CPU does ops actually give the guest, and is KVM usable?
+  # Answers the "is it ops's -cpu, or Nanos not forwarding HWCAP?" question.
+  # Always runs, regardless of the selected engine.
+  # ================================================================
+  diagnose-host-qemu:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install QEMU and utilities
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            qemu-system qemu-user qemu-user-static qemu-system-arm qemu-system-aarch64 \
+            binfmt-support
+          sudo ln -sf "$(which qemu-aarch64-static)" /usr/local/bin/qemu-aarch64
+
+      - name: Install ops
+        run: curl https://ops.city/get.sh -sSfL | sh
+
+      - name: Add ops to PATH
+        run: echo "$HOME/.ops/bin" >> $GITHUB_PATH
+
+      - name: Check ops version
+        run: ops version
+
+      # Host-side facts: KVM presence + real CPU crypto features of the runner.
+      - name: Inspect host (KVM + CPU features)
+        continue-on-error: true
+        run: |
+          {
+            echo "== /dev/kvm =="
+            ls -l /dev/kvm 2>&1 || echo "no /dev/kvm (KVM not available on this runner)"
+            echo ""
+            echo "== kvm group membership =="
+            id 2>&1 || true
+            echo ""
+            echo "== host CPU (lscpu) =="
+            lscpu 2>&1 || true
+            echo ""
+            echo "== host CPU crypto flags (/proc/cpuinfo Features line) =="
+            grep -m1 -iE 'Features' /proc/cpuinfo 2>&1 || echo "(no Features line)"
+          } | tee host-diag.txt
+
+      - name: Get package
+        run: ops pkg get "${{ inputs.hotspot_package }}" --arch "${{ inputs.arch }}"
+
+      # The key probe: dump the actual qemu command ops generates (no accel),
+      # so we can see which -cpu / -machine it really uses.
+      - name: Show generated QEMU command (no accel)
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          ops pkg load "${{ inputs.hotspot_package }}" --arch "${{ inputs.arch }}" --nightly \
+            --show-debug --verbose \
+            -a -version \
+            2>&1 | tee qemu-noaccel.txt
+
+      # Try to enable acceleration: ops adds "-machine accel=kvm:tcg -cpu host"
+      # then checks /dev/kvm. This shows whether KVM engages or falls back with a warning.
+      - name: Try acceleration (--accel) and show QEMU command
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          ops pkg load "${{ inputs.hotspot_package }}" --arch "${{ inputs.arch }}" --nightly \
+            --accel --show-debug --verbose \
+            -a -version \
+            2>&1 | tee qemu-accel.txt
+
+      - name: Summarize (diagnostics)
+        if: always()
+        run: |
+          {
+            echo "## Diagnostics: ops → QEMU CPU exposure & KVM"
+            echo ""
+            echo "### Host: KVM + real CPU crypto features"
+            echo '```'
+            grep -iE '/dev/kvm|no /dev/kvm|Features|aes|sha|pmull|Model name|Vendor' host-diag.txt 2>/dev/null | head -n 25 || echo "(nothing captured)"
+            echo '```'
+            echo "### QEMU command ops generated (NO accel) — look at -cpu / -machine"
+            echo '```'
+            grep -iE 'qemu-system|[-]cpu|[-]machine|[-]accel|enable-kvm' qemu-noaccel.txt 2>/dev/null | head -n 15 || echo "(qemu command not found in output)"
+            echo '```'
+            echo "### QEMU command WITH --accel — did KVM engage or fall back?"
+            echo '```'
+            grep -iE 'qemu-system|[-]cpu|[-]machine|[-]accel|enable-kvm|acceler|kvm|not supported|warn' qemu-accel.txt 2>/dev/null | head -n 20 || echo "(qemu command not found in output)"
+            echo '```'
+            echo "### How to read this"
+            echo "- If NO-accel already shows \`-cpu max\` but the JVM still saw only \`lse\`,"
+            echo "  the gap is **Nanos not forwarding HWCAP** (raise upstream), not ops."
+            echo "- If ops used a weaker \`-cpu\` (not \`max\`), that's the fixable ops/isInception path."
+            echo "- If --accel shows \`-cpu host\` + KVM engaged, real hardware AES should reach the guest;"
+            echo "  if it warns 'not supported', this runner has no /dev/kvm → need a self-hosted ARM host."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostics-host-qemu
+          path: |
+            host-diag.txt
+            qemu-noaccel.txt
+            qemu-accel.txt
+          retention-days: 30
+
+  # ================================================================
   # HotSpot: CPU features + intrinsic flags
   # ================================================================
   inspect-hotspot:
