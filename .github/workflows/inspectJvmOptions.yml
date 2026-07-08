@@ -82,23 +82,87 @@ jobs:
             -a -version \
             2>&1 | tee flags-final.txt
 
+      - name: Probe VM & system settings (-XshowSettings:all)
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          ops pkg load "${{ inputs.hotspot_package }}" --arch "${{ inputs.arch }}" --nightly \
+            -a -XshowSettings:all \
+            -a -version \
+            2>&1 | tee settings.txt
+
+      # Also capture how the VM ergonomically configured itself (selected GC, etc.)
+      - name: Probe ergonomic command-line flags (-XX:+PrintCommandLineFlags)
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          ops pkg load "${{ inputs.hotspot_package }}" --arch "${{ inputs.arch }}" --nightly \
+            -a -XX:+PrintCommandLineFlags \
+            -a -version \
+            2>&1 | tee cmdline-flags.txt
+
       - name: Summarize (HotSpot)
         if: always()
         run: |
+          # helper: print the named flags from flags-final.txt, sorted, one per line
+          show() {
+            grep -iE "$1" flags-final.txt 2>/dev/null | sed -E 's/[[:space:]]*\{.*//' | sort || true
+          }
           {
-            echo "## HotSpot hardware-acceleration report"
+            echo "## HotSpot: does the JVM use the hardware fully on Nanos?"
             echo ""
             echo "Package: \`${{ inputs.hotspot_package }}\` (arch \`${{ inputs.arch }}\`)"
             echo ""
-            echo "### CPU features seen by the guest"
+
+            echo "### 1. CPU features the guest exposes to the JVM"
+            echo "If this only shows a couple of features (e.g. just \`lse\`), the unikernel is NOT"
+            echo "advertising the optional crypto/SIMD extensions via HWCAP, and everything below"
+            echo "that depends on them will be off."
             echo '```'
-            grep -iE 'features|cpu' cpu-features.txt 2>/dev/null | head -n 20 || echo "(no CPU line captured)"
+            grep -iE 'features|cpu|cpuinfo' cpu-features.txt 2>/dev/null | head -n 20 || echo "(no CPU line captured)"
             echo '```'
-            echo "### Relevant intrinsic flags"
+
+            echo "### 2. Crypto hardware acceleration (needs CPU crypto extensions)"
             echo '```'
-            grep -iE 'Use(AES|SHA|GHASH|CRC32|MD5|Neon|FMA|PopCount|VectorizedMismatch|Montgomery|Adler32)' flags-final.txt 2>/dev/null | sort \
-              || echo "(no flags captured)"
+            show 'Use(AES|AESCTR|AESIntrinsics|GHASH|SHA|CRC32|CRC32C|CryptoPmull|ChaCha20|Poly1305|MD5|Base64|Adler32|IntPoly|Kyber|Dilithium)Intrinsics?|UseAES\b|UseSHA\b|UseCRC32\b'
             echo '```'
+
+            echo "### 3. ARM baseline instructions & memory ops (independent of HWCAP crypto)"
+            echo "DC ZVA cache-line zeroing = UseBlockZeroing; atomics = UseLSE; SIMD/SVE, prefetch, unaligned, spin-wait."
+            echo '```'
+            show 'UseBlockZeroing|BlockZeroingLowLimit|UseLSE|UseSVE|UseSIMDFor|UseSimpleArrayEquals|UseNeon|UseFMA|UsePopCountInstruction|UseUnalignedAccesses|AvoidUnalignedAccesses|UseCryptoPmullForCRC32|SoftwarePrefetchHintDistance|AllocatePrefetch(Distance|Lines|StepSize|Style|Instr)|OnSpinWaitInst|UseBranchProtection|UseVectorizedHashCodeIntrinsic|UseVectorizedMismatchIntrinsic|MaxVectorSize'
+            echo '```'
+
+            echo "### 4. Compiler / runtime ergonomics (did the VM see a real machine?)"
+            echo "ActiveProcessorCount / CICompilerCount / selected GC reveal how many CPUs & how much"
+            echo "RAM the guest reported. On Nanos a single-vCPU guest often disables tiered/parallel paths."
+            echo '```'
+            show 'ActiveProcessorCount|CICompilerCount\b|CICompilerCountPerCPU|TieredCompilation\b|TieredStopAtLevel|UseCompiler\b|BackgroundCompilation|ParallelGCThreads|ConcGCThreads|UseSerialGC|UseG1GC|UseParallelGC|UseZGC|UseShenandoahGC|UseNUMA\b|UseContainerSupport|UseTransparentHugePages|UseLargePages\b|MaxHeapSize|InitialHeapSize'
+            echo '```'
+
+            echo "### 5. VM & system settings (-XshowSettings:all)"
+            echo "Look at available processors, max/free memory, os.arch, os.name, sun.arch.data.model."
+            echo '```'
+            grep -iE 'processor|memory|heap|os\.|sun\.arch|cpu|available' settings.txt 2>/dev/null | head -n 30 || echo "(no settings captured)"
+            echo '```'
+
+            echo "### 6. Ergonomic command-line flags chosen by the VM"
+            echo '```'
+            head -n 5 cmdline-flags.txt 2>/dev/null || echo "(nothing captured)"
+            echo '```'
+
+            echo "### Verdict (crypto)"
+            if grep -qiE '^\s*bool\s+UseAES\s+=\s+true' flags-final.txt 2>/dev/null; then
+              echo "- ✅ **AES hardware acceleration is ENABLED** — the guest exposes the crypto extensions."
+            else
+              echo "- ❌ **AES hardware acceleration is DISABLED** (\`UseAES=false\`): AES/SHA/GCM run in software."
+              echo "  Root cause is upstream of the JVM: ops/QEMU is not exposing the CPU crypto features to the guest."
+            fi
+            if grep -qiE '^\s*bool\s+UseBlockZeroing\s+=\s+true' flags-final.txt 2>/dev/null; then
+              echo "- ✅ **DC ZVA block zeroing is ENABLED** (\`UseBlockZeroing=true\`) — baseline ARMv8, works even without HWCAP."
+            else
+              echo "- ⚠️ DC ZVA block zeroing is disabled (\`UseBlockZeroing=false\`): the guest may prohibit DC ZVA (DCZID_EL0.DZP)."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload HotSpot reports
@@ -109,6 +173,8 @@ jobs:
           path: |
             cpu-features.txt
             flags-final.txt
+            settings.txt
+            cmdline-flags.txt
           retention-days: 30
 
   # ================================================================
