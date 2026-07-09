@@ -1,0 +1,144 @@
+name: Verify QEMU 11.0.2 AVX-512 (TCG) — x86_64
+
+# Builda QEMU 11.0.2 da sorgente (con cache) e verifica in modo DEFINITIVO se il
+# TCG di quella versione emula AVX-512. Il test-chiave: -cpu Icelake-Server (un
+# modello che DICHIARA avx512f); se il TCG non lo sa eseguire, QEMU lo strippa
+# stampando "TCG doesn't support requested feature: ...avx512f".
+#
+# Atteso: warning presente -> AVX-512 NON emulato (confermato per 11.0.2).
+# Se il warning sparisse -> AVX-512 sarebbe stato aggiunto al TCG (novita').
+#
+# NB: usare un MODELLO che dichiara AVX-512 (Icelake-Server), NON "-cpu max":
+# max abilita solo cio' che il TCG supporta -> non richiederebbe avx512f -> il
+# warning non comparirebbe MAI, dando un falso "supportato".
+
+on:
+  workflow_dispatch:
+    inputs:
+      qemu_version:
+        description: "QEMU version to build"
+        default: "11.0.2"
+      cpu_model:
+        description: "CPU model that declares AVX-512 (per il probe)"
+        default: "Icelake-Server"
+      package:
+        description: "ops package (x86_64 HotSpot JRE) per il boot nanos opzionale"
+        default: "AngeloRubens/AzulJREx64Linux:25.0.1"
+
+jobs:
+  verify-avx512-tcg:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Cache QEMU ${{ inputs.qemu_version }} build
+        id: cache-qemu
+        uses: actions/cache@v4
+        with:
+          path: ~/qemu-install
+          key: qemu-${{ inputs.qemu_version }}-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Build QEMU ${{ inputs.qemu_version }} (cache miss)
+        if: steps.cache-qemu.outputs.cache-hit != 'true'
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y build-essential ninja-build python3-venv python3-pip \
+            pkg-config libglib2.0-dev libpixman-1-dev libslirp-dev zlib1g-dev libfdt-dev \
+            flex bison curl
+          curl -sL -o qemu.tar.xz "https://download.qemu.org/qemu-${{ inputs.qemu_version }}.tar.xz"
+          tar xf qemu.tar.xz
+          cd "qemu-${{ inputs.qemu_version }}"
+          # configure crea il proprio venv e bootstrappa meson; ninja da apt.
+          ./configure --prefix="$HOME/qemu-install" \
+            --target-list=x86_64-softmmu,aarch64-softmmu \
+            --enable-slirp --disable-docs --disable-tools --disable-werror
+          make -j"$(nproc)"
+          make install
+
+      - name: Put QEMU on PATH & show version
+        run: |
+          echo "$HOME/qemu-install/bin" >> "$GITHUB_PATH"
+          "$HOME/qemu-install/bin/qemu-system-x86_64" --version
+
+      # --- Probe DEFINITIVO: nessun guest, solo la realizzazione della CPU. ---
+      # QEMU stampa i warning di feature-filter a init, prima di ogni boot.
+      - name: Probe — does TCG strip AVX-512?
+        id: probe
+        run: |
+          set -x
+          timeout 20 "$HOME/qemu-install/bin/qemu-system-x86_64" \
+            -machine q35,accel=tcg -cpu "${{ inputs.cpu_model }}" \
+            -display none -nodefaults -no-user-config -m 256 \
+            2>&1 | tee qemu-probe.txt || true
+
+          echo "### QEMU $("$HOME/qemu-install/bin/qemu-system-x86_64" --version | head -1)" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Probe -cpu ${{ inputs.cpu_model }} (accel=tcg) — warning AVX-512" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          grep -iE "TCG doesn't support requested feature.*(avx512|vaes|vpclmulqdq|gfni|avx10|apx)" qemu-probe.txt >> "$GITHUB_STEP_SUMMARY" || echo "(nessun warning avx512/evex catturato)" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+          if grep -qiE "TCG doesn't support requested feature.*avx512f" qemu-probe.txt; then
+            echo "verdict=stripped" >> "$GITHUB_OUTPUT"
+            echo "**VERDETTO: QEMU ${{ inputs.qemu_version }} — il TCG NON emula AVX-512 (avx512f strippato).**" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "verdict=maybe-supported" >> "$GITHUB_OUTPUT"
+            echo "**VERDETTO: nessuno strip di avx512f — VERIFICARE se AVX-512 e' ora emulato dal TCG!**" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # --- Bonus: boota nanos sotto QEMU 11 per i flag JVM reali (non blocca). ---
+      - name: Install ops
+        if: always()
+        run: curl https://ops.city/get.sh -sSfL | sh
+      - name: ops on PATH
+        if: always()
+        run: echo "$HOME/.ops/bin" >> "$GITHUB_PATH"
+
+      - name: Build nanos image via ops
+        if: always()
+        continue-on-error: true
+        run: |
+          timeout 180 ops pkg load "${{ inputs.package }}" --arch amd64 --nightly \
+            -a -XX:+UnlockDiagnosticVMOptions -a -XX:+PrintFlagsFinal \
+            -a -Xlog:os+cpu=info -a -version 2>&1 | tee ops-baseline.txt || true
+
+      - name: Boot nanos under QEMU 11 (TCG, ${{ inputs.cpu_model }})
+        if: always()
+        continue-on-error: true
+        run: |
+          IMG=$(grep -oE '/[^[:space:]]+/\.ops/images/[^[:space:]]+' ops-baseline.txt | head -1 || true)
+          [ -f "$IMG" ] || IMG=$(ls -t "$HOME/.ops/images/"* 2>/dev/null | head -1 || true)
+          if [ ! -f "$IMG" ]; then echo "immagine non trovata, salto il boot"; exit 0; fi
+          echo "Image: $IMG"
+          timeout 360 "$HOME/qemu-install/bin/qemu-system-x86_64" -machine q35,accel=tcg \
+            -cpu "${{ inputs.cpu_model }}" \
+            -device pcie-root-port,port=0x10,chassis=1,id=pci.1,bus=pcie.0,multifunction=on,addr=0x3 \
+            -device pcie-root-port,port=0x11,chassis=2,id=pci.2,bus=pcie.0,addr=0x3.0x6 \
+            -device pcie-root-port,port=0x12,chassis=3,id=pci.4,bus=pcie.0,addr=0x3.0x4 \
+            -device virtio-scsi-pci,bus=pci.2,addr=0x0,id=scsi0 \
+            -device scsi-hd,bus=scsi0.0,drive=hd0 \
+            -vga none -device isa-debug-exit -m 2G \
+            -device virtio-rng-pci -device virtio-balloon \
+            -drive file="$IMG",format=raw,if=none,id=hd0 \
+            -device virtio-net,bus=pci.4,addr=0x0,netdev=n0,mac=0e:7d:fa:96:76:74 \
+            -netdev user,id=n0 -display none -serial stdio \
+            2>&1 | tee nanos-run.txt || true
+
+          {
+            echo "### JVM sotto QEMU 11 (${{ inputs.cpu_model }}, TCG)"
+            echo '```'
+            grep -E 'CPU: total' nanos-run.txt | head -1 || echo "(no os+cpu)"
+            grep -E '[[:space:]](UseAVX|MaxVectorSize|UseSHA|UseFMA|UseAES|UseBASE64Intrinsics)[[:space:]]+=' nanos-run.txt || echo "(no flags)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qemu11-avx512-logs
+          path: |
+            qemu-probe.txt
+            ops-baseline.txt
+            nanos-run.txt
