@@ -1,0 +1,169 @@
+name: Test x86_64 JRE under QEMU TCG (Icelake / AVX2)
+
+# Scopo: validare il lato x86 della JVM su nanos SENZA hardware speciale.
+# Sotto TCG la CPU del guest e' host-independent: -cpu Icelake-Server da' al
+# guest AVX/AVX2/BMI2/AES/CLMUL anche su runner privi di quelle feature.
+# NB: TCG NON implementa AVX-512 -> QEMU lo strippa con warning. Quindi la
+# patch #22 (XCR0/AVX-512) NON e' testabile qui: richiede silicio AVX-512
+# reale + KVM (self-hosted runner o VM GCP C2/C3). Vedi CLAUDE.md.
+#
+# ubuntu-24.04 fornisce QEMU 8.2, che nel TCG supporta AVX/AVX2 (aggiunti in
+# QEMU 8.0). Con QEMU < 8 il TCG non ha AVX -> il job fallisce con messaggio.
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: "ops package (x86_64 HotSpot JRE)"
+        default: "AngeloRubens/AzulJREx64Linux:25.0.1"
+      cpu_model:
+        description: "QEMU -cpu model to emulate under TCG"
+        default: "Icelake-Server"
+
+jobs:
+  test-x64-tcg-avx2:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install QEMU and utilities
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-utils wget tar gzip
+          echo "QEMU version:"
+          qemu-system-x86_64 --version
+
+      # Gate: il TCG ha AVX/AVX2 solo da QEMU 8.0. ubuntu-24.04 = 8.2.
+      - name: Require QEMU >= 8 (TCG AVX/AVX2)
+        run: |
+          ver=$(qemu-system-x86_64 --version | grep -oE '[0-9]+\.[0-9]+' | head -1)
+          major=${ver%%.*}
+          echo "Detected QEMU major=$major (full: $ver)"
+          if [ "$major" -lt 8 ]; then
+            echo "::error::QEMU $ver: il TCG non ha AVX/AVX2 (serve >= 8.0). Il guest sarebbe solo-SSE."
+            exit 1
+          fi
+
+      - name: Install ops
+        run: curl https://ops.city/get.sh -sSfL | sh
+
+      - name: Add ops to PATH
+        run: echo "$HOME/.ops/bin" >> $GITHUB_PATH
+
+      - name: Check ops version
+        run: ops version
+
+      # Costruisce l'immagine nanos con gli argomenti JVM diagnostici gia'
+      # "baked" nel manifest. ops la lancia con la propria QEMU (accel di
+      # default, -cpu host del runner): quel run ci serve solo a produrre
+      # l'immagine in ~/.ops/images/ e come baseline "ops default".
+      - name: Build nanos image via ops (baseline run)
+        id: build
+        continue-on-error: true
+        run: |
+          set -x
+          timeout 180 ops pkg load "${{ inputs.package }}" \
+            --arch amd64 --nightly \
+            -a -XX:+UnlockDiagnosticVMOptions \
+            -a -XX:+PrintFlagsFinal \
+            -a -Xlog:os+cpu=info \
+            -a -version \
+            2>&1 | tee ops-baseline.txt || true
+
+      - name: Locate built image
+        id: img
+        run: |
+          # 1) dalla riga "booting .../images/NAME"; 2) fallback: piu' recente
+          IMG=$(grep -oE '/[^[:space:]]+/\.ops/images/[^[:space:]]+' ops-baseline.txt | head -1 || true)
+          if [ -z "$IMG" ] || [ ! -f "$IMG" ]; then
+            IMG=$(ls -t "$HOME/.ops/images/"* 2>/dev/null | head -1 || true)
+          fi
+          if [ -z "$IMG" ] || [ ! -f "$IMG" ]; then
+            echo "::error::Immagine nanos non trovata in ~/.ops/images/"
+            ls -la "$HOME/.ops/images/" || true
+            exit 1
+          fi
+          echo "Image: $IMG"
+          echo "image=$IMG" >> "$GITHUB_OUTPUT"
+
+      # Il test vero: rilancia la STESSA immagine in raw QEMU con accel=tcg e
+      # -cpu Icelake-Server. Sotto TCG il guest ottiene AVX2 anche se il runner
+      # non ce l'ha; QEMU strippa AVX-512 con warning espliciti (li mostriamo).
+      - name: Run under TCG with emulated CPU
+        run: |
+          set -x
+          timeout 360 qemu-system-x86_64 -machine q35,accel=tcg \
+            -cpu "${{ inputs.cpu_model }}" \
+            -device pcie-root-port,port=0x10,chassis=1,id=pci.1,bus=pcie.0,multifunction=on,addr=0x3 \
+            -device pcie-root-port,port=0x11,chassis=2,id=pci.2,bus=pcie.0,addr=0x3.0x6 \
+            -device pcie-root-port,port=0x12,chassis=3,id=pci.4,bus=pcie.0,addr=0x3.0x4 \
+            -device virtio-scsi-pci,bus=pci.2,addr=0x0,id=scsi0 \
+            -device scsi-hd,bus=scsi0.0,drive=hd0 \
+            -vga none -device isa-debug-exit -m 2G \
+            -device virtio-rng-pci -device virtio-balloon \
+            -drive file="${{ steps.img.outputs.image }}",format=raw,if=none,id=hd0 \
+            -device virtio-net,bus=pci.4,addr=0x0,netdev=n0,mac=0e:7d:fa:96:76:74 \
+            -netdev user,id=n0 -display none -serial stdio \
+            2>&1 | tee tcg-run.txt || true
+          # isa-debug-exit fa uscire QEMU con codice != 0: non e' un errore.
+          test -s tcg-run.txt
+
+      - name: Analyze & assert
+        run: |
+          flagval() { awk -v f="$1" '$0 ~ ("[[:space:]]"f"[[:space:]]+=") {sub(/.*=[[:space:]]*/,""); print $1; exit}' tcg-run.txt; }
+
+          echo "## x86_64 TCG (${{ inputs.cpu_model }}) — CPU esposta al guest" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          grep -E 'CPU: total' tcg-run.txt | head -1 >> "$GITHUB_STEP_SUMMARY" || echo "(nessuna riga os+cpu)" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+          echo "### AVX-512 strippato dal TCG (atteso)" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          grep -iE "TCG doesn't support requested feature.*avx512|vaes|vpclmulqdq|gfni" tcg-run.txt | head -12 >> "$GITHUB_STEP_SUMMARY" || echo "(nessun warning avx512 catturato)" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+          UAVX=$(flagval UseAVX);            MVS=$(flagval MaxVectorSize)
+          USHA=$(flagval UseSHA);            UFMA=$(flagval UseFMA)
+          UAES=$(flagval UseAES);            UBMI2=$(flagval UseBMI2Instructions)
+          UB64=$(flagval UseBASE64Intrinsics); UVHC=$(flagval UseVectorizedHashCodeIntrinsic)
+          USHA256=$(flagval UseSHA256Intrinsics)
+
+          {
+            echo "### Flag chiave rilevati"
+            echo "| Flag | Valore |"
+            echo "|---|---|"
+            echo "| UseAVX | ${UAVX:-?} |"
+            echo "| MaxVectorSize | ${MVS:-?} |"
+            echo "| UseFMA | ${UFMA:-?} |"
+            echo "| UseAES | ${UAES:-?} |"
+            echo "| UseSHA / UseSHA256Intrinsics | ${USHA:-?} / ${USHA256:-?} |"
+            echo "| UseBMI2Instructions | ${UBMI2:-?} |"
+            echo "| UseBASE64Intrinsics | ${UB64:-?} |"
+            echo "| UseVectorizedHashCodeIntrinsic | ${UVHC:-?} |"
+            echo ""
+            echo "> Nota: la patch #22 (AVX-512) NON e' testabile in TCG — richiede silicio AVX-512 + KVM."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # --- Regression guard (conservativo, garantito da TCG >= 8.0) ---
+          fail=0
+          if ! grep -qE 'CPU: total' tcg-run.txt; then
+            echo "::error::nanos non ha stampato la riga os+cpu (boot fallito sotto TCG)"; fail=1
+          fi
+          if [ -z "$MVS" ] || [ "$MVS" -lt 32 ] 2>/dev/null; then
+            echo "::error::MaxVectorSize=$MVS (atteso >=32): AVX2 non ha ingranato nel guest"; fail=1
+          fi
+          if [ -z "$UAVX" ] || [ "$UAVX" -lt 2 ] 2>/dev/null; then
+            echo "::error::UseAVX=$UAVX (atteso >=2): AVX2 non emulato"; fail=1
+          fi
+          [ "$fail" -eq 0 ] && echo "OK: guest AVX2 emulato, nanos ha esposto MaxVectorSize=$MVS / UseAVX=$UAVX"
+          exit $fail
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: x64-tcg-avx2-logs
+          path: |
+            ops-baseline.txt
+            tcg-run.txt
