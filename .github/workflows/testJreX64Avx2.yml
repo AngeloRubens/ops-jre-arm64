@@ -93,7 +93,7 @@ jobs:
       - name: Run under TCG with emulated CPU
         run: |
           set -x
-          timeout 360 qemu-system-x86_64 -machine q35,accel=tcg \
+          timeout 360 qemu-system-x86_64 -accel=tcg \
             -cpu "${{ inputs.cpu_model }}" \
             -device pcie-root-port,port=0x10,chassis=1,id=pci.1,bus=pcie.0,multifunction=on,addr=0x3 \
             -device pcie-root-port,port=0x11,chassis=2,id=pci.2,bus=pcie.0,addr=0x3.0x6 \
